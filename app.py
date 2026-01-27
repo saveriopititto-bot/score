@@ -272,8 +272,7 @@ with st.sidebar:
     else:
         st.info("Connetti il tuo account per analizzare le attività.")
         if c_id and c_sec:
-            # URL Redirect (Modificare in produzione)
-            redirect_uri = "http://localhost:8501" 
+            redirect_uri = "https://scorerun.streamlit.app/" 
             link = auth_svc.get_authorization_link(redirect_uri)
             st.link_button("🔗 Connetti a Strava", link, type="primary", use_container_width=True)
         else:
