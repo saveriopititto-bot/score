@@ -10,19 +10,33 @@ class AICoachService:
             genai.configure(api_key=api_key)
             self.model = genai.GenerativeModel('gemini-1.5-flash')
 
-    def get_feedback(self, data):
+    # Aggiungi il parametro 'zones' qui sotto
+    def get_feedback(self, data, zones):
         if not self.model: return "⚠️ API Key mancante."
+        
+        # Formattiamo le zone in una stringa leggibile
+        zones_str = ", ".join([f"{z['Zone']}: {z['Percent']:.1f}%" for z in zones])
+        
         prompt = f"""
-        Analizza questa corsa (SCORE 4.0) come un coach esperto.
-        Dati: {data}
-        Fornisci: 1. Analisi Efficienza, 2. Gestione Sforzo, 3. Consiglio Pratico.
-        Usa Markdown. Sii breve.
+        Agisci come un coach di atletica élite. Analizza questa sessione (SCORE 4.0).
+        
+        DATI SESSIONE:
+        - Distanza: {data['Dist (km)']} km
+        - Meteo: {data['Meteo']}
+        - SCORE: {data['SCORE']} (Livello: {data['Rank']})
+        - Efficienza (Decoupling): {data['Decoupling']}% (Target <5%)
+        - Benchmark WR: {data['WR_Pct']}% del record del mondo
+        - DISTRIBUZIONE ZONE: {zones_str}
+        
+        RICHIESTA (Markdown, tono tecnico ma motivante):
+        1. 🧠 **Analisi Fisiologica**: Commenta il Disaccoppiamento e la distribuzione nelle Zone. L'atleta ha rispettato l'obiettivo della seduta?
+        2. 🔋 **Gestione**: Come ha influito il meteo o la strategia di passo (WR Pct)?
+        3. 🎯 **Next Step**: Un consiglio secco per il prossimo allenamento.
         """
         try:
             return self.model.generate_content(prompt).text
         except Exception as e:
             return f"Errore AI: {e}"
-
 class WeatherService:
     URL = "https://archive-api.open-meteo.com/v1/archive"
     
