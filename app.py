@@ -181,8 +181,8 @@ with st.sidebar:
         st.success("✅ Connesso")
         if st.button("Logout"): st.session_state.strava_token = None; st.rerun()
     elif c_id and c_sec:
-        # URL DINAMICO: Cambia in produzione
-        redirect = "http://localhost:8501" 
+        # URL https://scorerun.streamlit.app/
+        redirect = "https://scorerun.streamlit.app/" 
         st.link_button("🔗 Login Strava", auth_svc.get_auth_link(redirect), type="primary")
 
     st.divider()
