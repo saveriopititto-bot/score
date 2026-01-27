@@ -6,9 +6,13 @@ import matplotlib.pyplot as plt
 import requests
 from datetime import datetime
 
-st.set_page_config(page_title="SCORE Run Analyzer + Strava", layout="centered")
+# --- CONFIGURAZIONE PAGINA ---
+st.set_page_config(
+    page_title="SCORE Run Analyzer",
+    layout="centered"
+)
 
-# --- MOTORE DI CALCOLO (Aggiornato per Strava) ---
+# --- MOTORE DI CALCOLO ---
 class ScoreAnalyzer:
     def __init__(self, weight=70.0):
         self.WEIGHT = weight
@@ -29,8 +33,6 @@ class ScoreAnalyzer:
 
             # --- LOGICA DI PARSING ---
             if source_type == "strava":
-                # Parsing dati Strava Streams
-                # Strava restituisce liste separate per ogni stream
                 streams = data.get('streams', {})
                 summary = data.get('summary', {})
                 
@@ -39,15 +41,14 @@ class ScoreAnalyzer:
                 ascent = summary.get('total_elevation_gain', 0)
                 date_str = summary.get('start_date', date_str)
                 
-                # Estrai array dagli streams
                 if 'heartrate' in streams and 'watts' in streams:
                     hr_samples = streams['heartrate']['data']
                     power_samples = streams['watts']['data']
                 else:
-                    return None # Dati mancanti
+                    return None 
                     
             else:
-                # Parsing dati File JSON Originale
+                # Parsing File JSON
                 header = data.get('DeviceLog', {}).get('Header', {})
                 distance = header.get('Distance', 0)
                 duration = header.get('Duration', 0)
@@ -67,7 +68,7 @@ class ScoreAnalyzer:
             if not hr_samples or not power_samples:
                 return None
 
-            # --- CALCOLO SCORE (Identico a prima) ---
+            # --- CALCOLO SCORE ---
             avg_hr = np.mean(hr_samples)
             avg_power = np.mean(power_samples)
             
@@ -108,12 +109,10 @@ class ScoreAnalyzer:
                 "decoupling": decoupling
             }
         except Exception as e:
-            # st.error(f"Errore calcolo: {e}") # Debug
             return None
 
 # --- FUNZIONI STRAVA API ---
 def get_strava_activities(client_id, client_secret, refresh_token, limit=5):
-    """Scambia il token e scarica le attività + streams"""
     auth_url = "https://www.strava.com/oauth/token"
     payload = {
         'client_id': client_id,
@@ -122,41 +121,46 @@ def get_strava_activities(client_id, client_secret, refresh_token, limit=5):
         'grant_type': 'refresh_token'
     }
     
-    # 1. Ottieni Access Token Fresco
-    res = requests.post(auth_url, data=payload)
-    if res.status_code != 200:
-        st.error("Errore Autenticazione Strava. Controlla le chiavi.")
+    try:
+        res = requests.post(auth_url, data=payload)
+        if res.status_code != 200:
+            st.error(f"Errore Auth Strava: {res.text}")
+            return []
+            
+        access_token = res.json()['access_token']
+        header = {'Authorization': f'Bearer {access_token}'}
+        
+        act_url = "https://www.strava.com/api/v3/athlete/activities"
+        activities = requests.get(act_url, headers=header, params={'per_page': limit}).json()
+        
+        full_data = []
+        my_bar = st.progress(0, text="Scaricamento dati da Strava...")
+        
+        for i, act in enumerate(activities):
+            act_id = act['id']
+            stream_url = f"https://www.strava.com/api/v3/activities/{act_id}/streams"
+            streams = requests.get(stream_url, headers=header, params={'keys': 'watts,heartrate', 'key_by_type': 'true'}).json()
+            
+            full_data.append({
+                "summary": act,
+                "streams": streams
+            })
+            my_bar.progress((i + 1) / limit)
+            
+        my_bar.empty()
+        return full_data
+    except Exception as e:
+        st.error(f"Errore connessione: {e}")
         return []
-        
-    access_token = res.json()['access_token']
-    header = {'Authorization': f'Bearer {access_token}'}
-    
-    # 2. Lista Attività
-    act_url = "https://www.strava.com/api/v3/athlete/activities"
-    activities = requests.get(act_url, headers=header, params={'per_page': limit}).json()
-    
-    full_data = []
-    
-    # 3. Scarica Dettagli (Streams) per ogni attività
-    my_bar = st.progress(0, text="Scaricamento dati da Strava...")
-    
-    for i, act in enumerate(activities):
-        act_id = act['id']
-        # Scarica flussi: watts, heartrate
-        stream_url = f"https://www.strava.com/api/v3/activities/{act_id}/streams"
-        streams = requests.get(stream_url, headers=header, params={'keys': 'watts,heartrate', 'key_by_type': 'true'}).json()
-        
-        full_data.append({
-            "summary": act,
-            "streams": streams
-        })
-        my_bar.progress((i + 1) / limit)
-        
-    my_bar.empty()
-    return full_data
 
 # --- INTERFACCIA ---
 st.title("🏃‍♂️ SCORE Run Analyzer")
+
+# Inizializza le variabili per evitare NameError
+client_id = None
+client_secret = None
+refresh_token = None
+run_strava = False # Variabile pulsante
 
 with st.sidebar:
     st.header("Impostazioni")
@@ -165,28 +169,35 @@ with st.sidebar:
     
     st.divider()
     st.subheader("🔌 Connessione Strava")
-    # Cerca di prendere le chiavi dai Secrets, altrimenti chiedile
-if 'strava' in st.secrets:
-    client_id = st.secrets['strava']['client_id']
-    client_secret = st.secrets['strava']['client_secret']
-    refresh_token = st.secrets['strava']['refresh_token']
-    st.sidebar.success("Chiavi Strava caricate dai Secrets! 🔒")
-else:
-    client_id = st.sidebar.text_input("Client ID")
-    client_secret = st.sidebar.text_input("Client Secret", type="password")
-    refresh_token = st.sidebar.text_input("Refresh Token", type="password")
     
+    # 1. Tenta di caricare dai Secrets
+    if 'strava' in st.secrets:
+        client_id = st.secrets['strava']['client_id']
+        client_secret = st.secrets['strava']['client_secret']
+        refresh_token = st.secrets['strava']['refresh_token']
+        st.success("🔒 Chiavi caricate dai Secrets!")
+    else:
+        # 2. Altrimenti chiedi input manuale
+        client_id = st.text_input("Client ID")
+        client_secret = st.text_input("Client Secret", type="password")
+        refresh_token = st.text_input("Refresh Token", type="password")
+    
+    # IL PULSANTE È QUI (Sempre visibile)
     run_strava = st.button("Scarica da Strava")
 
 # Main Logic
 results = []
 
 # A. FLUSSO STRAVA
-if run_strava and client_id and refresh_token:
-    strava_data = get_strava_activities(client_id, client_secret, refresh_token)
-    for d in strava_data:
-        res = analyzer.analyze(d, source_type="strava")
-        if res: results.append(res)
+if run_strava:
+    if client_id and refresh_token:
+        strava_data = get_strava_activities(client_id, client_secret, refresh_token)
+        if strava_data:
+            for d in strava_data:
+                res = analyzer.analyze(d, source_type="strava")
+                if res: results.append(res)
+    else:
+        st.error("Mancano le chiavi Strava (Client ID o Token).")
 
 # B. FLUSSO FILE MANUALE
 uploaded_files = st.file_uploader("Oppure carica file JSON", accept_multiple_files=True)
@@ -210,14 +221,20 @@ if results:
         st.metric("SCORE 4.0", f"{last['score']:.2f}")
     with col2:
         st.caption("Feedback Rapido")
-        if last['score'] < 0.25: st.info("Recupero / Base")
-        elif last['score'] < 0.5: st.success("Mantenimento")
-        else: st.warning("Performance Alta")
+        if last['score'] < 0.25: st.info("🛠 Recupero / Base")
+        elif last['score'] < 0.5: st.success("📈 Mantenimento")
+        elif last['score'] < 1.0: st.warning("🚀 Performance Alta")
+        else: st.error("🏆 Élite")
 
     # Grafico
     st.subheader("Trend Temporale")
-    st.line_chart(df.set_index('date')['score'])
+    if len(df) > 1:
+        st.line_chart(df.set_index('date')['score'])
+    else:
+        st.info("Carica più attività per vedere il grafico del trend.")
     
-    st.dataframe(df)
+    with st.expander("Vedi Dati Grezzi"):
+        st.dataframe(df)
 else:
-    st.info("Carica dei file o connettiti a Strava per iniziare.")
+    if not run_strava:
+        st.info("👈 Usa la barra laterale per connetterti a Strava o carica un file JSON qui sopra.")
