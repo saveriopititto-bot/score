@@ -6,18 +6,18 @@ import altair as alt
 import google.generativeai as genai
 from datetime import datetime
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict
 
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(
-    page_title="SCORE 4.0 Pro Lab",
+    page_title="SCORE 4.0 Lab",
     page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ==========================================
-# 1. DOMAIN LAYER
+# 1. DOMAIN LAYER (Logica di Business)
 # ==========================================
 
 @dataclass
@@ -34,6 +34,7 @@ class RunMetrics:
     humidity: float
 
 class ScoreEngine:
+    """Motore di calcolo SCORE 4.0, Riegel Benchmark e Zone Coggan"""
     W_REF_SPEC = 6.0        
     ALPHA = 0.8             
     WR_BASE_DIST = 42195.0
@@ -54,6 +55,45 @@ class ScoreEngine:
         p2, h2 = np.mean(power_stream[half:]), np.mean(hr_stream[half:])
         if h1 == 0 or h2 == 0: return 0.0
         return (p1/h1 - p2/h2) / (p1/h1)
+
+    @staticmethod
+    def calculate_zones(watts_stream: list, ftp: int) -> List[Dict]:
+        """Calcola la distribuzione % nelle zone di Coggan basate sulla FTP"""
+        if not watts_stream or ftp <= 0: return []
+        
+        # Definizione Zone Coggan (Limite superiore, Colore)
+        zones_def = [
+            {"name": "Z1 Recupero", "limit": 0.55 * ftp, "color": "#bdc3c7"}, # Grigio
+            {"name": "Z2 Fondo Lento", "limit": 0.75 * ftp, "color": "#3498db"}, # Blu
+            {"name": "Z3 Tempo", "limit": 0.90 * ftp, "color": "#2ecc71"}, # Verde
+            {"name": "Z4 Soglia", "limit": 1.05 * ftp, "color": "#f1c40f"}, # Giallo
+            {"name": "Z5 VO2Max", "limit": 1.20 * ftp, "color": "#e67e22"}, # Arancione
+            {"name": "Z6 Anaerobico", "limit": 9999, "color": "#e74c3c"}  # Rosso
+        ]
+        
+        counts = [0] * len(zones_def)
+        total_samples = len(watts_stream)
+        
+        # Assegnazione sample alle zone
+        for w in watts_stream:
+            for i, z in enumerate(zones_def):
+                if w <= z["limit"]:
+                    counts[i] += 1
+                    break
+        
+        # Preparazione dati per grafico
+        result = []
+        for i, z in enumerate(zones_def):
+            pct = (counts[i] / total_samples) * 100
+            minutes = round((counts[i]) / 60, 1) # Assumendo 1 sample al secondo
+            if pct > 0.1: # Escludiamo zone vuote per pulizia grafico
+                result.append({
+                    "Zone": z["name"],
+                    "Percent": pct,
+                    "Color": z["color"],
+                    "Minutes": minutes
+                })
+        return result
 
     def compute_score(self, metrics: RunMetrics, decoupling: float) -> Tuple[float, float, float]:
         grade = metrics.ascent_meters / metrics.distance_meters if metrics.distance_meters > 0 else 0
@@ -84,7 +124,6 @@ class ScoreEngine:
 # ==========================================
 
 class AICoachService:
-    """Gestisce l'integrazione con Google Gemini per l'analisi qualitativa"""
     def __init__(self, api_key):
         if api_key:
             genai.configure(api_key=api_key)
@@ -97,25 +136,21 @@ class AICoachService:
             return "⚠️ Chiave API Gemini mancante. Aggiungila ai Secrets per attivare il Coach."
         
         prompt = f"""
-        Sei un allenatore di atletica leggera d'élite, esperto in fisiologia e analisi dati.
-        Analizza questa sessione di corsa basandoti sulle metriche SCORE 4.0.
+        Sei un allenatore di atletica leggera d'élite. Analizza questa sessione di corsa (SCORE 4.0).
         
-        DATI SESSIONE:
+        DATI:
         - Distanza: {metrics_dict['Dist (km)']} km
-        - Potenza Media: {metrics_dict['Power']} W
-        - Battito Medio: {metrics_dict['HR']} bpm
-        - Disaccoppiamento (Deriva Aerobica): {metrics_dict['Decoupling']}% (sopra 5% indica fatica/scarso fondo)
-        - SCORE 4.0: {metrics_dict['SCORE']} (Scala: <1 Amatore, 1-2 Avanzato, 2-3 Regionale, 3-4 Nazionale, >4 Mondiale)
-        - WR Percent: {metrics_dict['WR_Pct']}% (Rispetto al Record del Mondo)
-        - Meteo: {metrics_dict['Meteo']} (WCF Factor: {metrics_dict['WCF']})
+        - Potenza: {metrics_dict['Power']} W
+        - HR: {metrics_dict['HR']} bpm
+        - Disaccoppiamento: {metrics_dict['Decoupling']}% (positivo alto >5% = deriva)
+        - SCORE: {metrics_dict['SCORE']} (<1 Amatore, >4 Mondiale)
+        - WR Percent: {metrics_dict['WR_Pct']}%
+        - Meteo: {metrics_dict['Meteo']}
         
-        RICHIESTA:
-        Fornisci un feedback tecnico strutturato in 3 punti brevi:
-        1. 🧠 **Analisi**: Cosa dice il disaccoppiamento sulla resistenza dell'atleta? Lo SCORE è coerente con il livello?
-        2. 🔋 **Gestione**: Ha gestito bene la potenza rispetto al meteo?
-        3. 🎯 **Consiglio**: Un singolo allenamento specifico per migliorare il punto debole rilevato.
-        
-        Tono: Professionale, sintetico, motivante ma severo sui dati. Usa formattazione Markdown.
+        RICHIESTA (Markdown, breve):
+        1. 🧠 **Analisi**: Valuta efficienza e resistenza (disaccoppiamento).
+        2. 🔋 **Gestione**: Ha tenuto bene?
+        3. 🎯 **Consiglio**: Un allenamento specifico da fare.
         """
         try:
             response = self.model.generate_content(prompt)
@@ -153,53 +188,62 @@ class StravaService:
         try:
             acts = requests.get(f"{self.API_URL}/athlete/activities", headers={'Authorization': f'Bearer {token}'}, params={'per_page': limit}).json()
             data = []
-            for a in acts:
+            prog_bar = st.progress(0, text="Scaricamento dati...")
+            for i, a in enumerate(acts):
                 if a.get('type') == 'Run':
                     streams = requests.get(f"{self.API_URL}/activities/{a['id']}/streams", headers={'Authorization': f'Bearer {token}'}, params={'keys': 'watts,heartrate,time', 'key_by_type': 'true'}).json()
                     if 'watts' in streams and 'heartrate' in streams:
                         data.append({'summary': a, 'streams': streams})
+                prog_bar.progress((i + 1) / limit)
+            prog_bar.empty()
             return data
         except: return []
 
 # ==========================================
-# 3. PRESENTATION LAYER
+# 3. PRESENTATION LAYER (UI)
 # ==========================================
 if "strava_token" not in st.session_state: st.session_state.strava_token = None
 if "analyzed_data" not in st.session_state: st.session_state.analyzed_data = []
 
 with st.sidebar:
-    st.header("⚙️ Config")
+    st.header("⚙️ Configurazione")
     c_id = st.text_input("Client ID", value=st.secrets.get("strava", {}).get("client_id", ""))
     c_sec = st.text_input("Client Secret", value=st.secrets.get("strava", {}).get("client_secret", ""), type="password")
-    
-    # AI Key
     ai_key = st.text_input("Gemini API Key", value=st.secrets.get("gemini", {}).get("api_key", ""), type="password")
     
     auth_svc = StravaService(c_id, c_sec)
     
+    st.divider()
+    
     if st.session_state.strava_token:
-        st.success("✅ Connesso")
-        if st.button("Logout"): st.session_state.strava_token = None; st.rerun()
+        st.success("✅ Strava Connesso")
+        if st.button("Logout", use_container_width=True): st.session_state.strava_token = None; st.rerun()
     elif c_id and c_sec:
-        # URL https://scorerun.streamlit.app/
+        # --- URL PRODUZIONE AGGIORNATO ---
         redirect = "https://scorerun.streamlit.app/" 
-        st.link_button("🔗 Login Strava", auth_svc.get_auth_link(redirect), type="primary")
+        st.link_button("🔗 Login Strava", auth_svc.get_auth_link(redirect), type="primary", use_container_width=True)
+    else:
+        st.info("Inserisci le credenziali per connetterti.")
 
     st.divider()
-    weight = st.number_input("Peso (kg)", 70.0)
+    st.header("👤 Atleta")
+    weight = st.number_input("Peso (kg)", 70.0, step=0.5)
     hr_max = st.number_input("FC Max", 185)
     hr_rest = st.number_input("FC Riposo", 50)
+    # --- NUOVO INPUT FTP ---
+    ftp = st.number_input("FTP (W)", value=250, step=5, help="Functional Threshold Power per calcolo Zone")
 
 # OAUTH CALLBACK
 if "code" in st.query_params and not st.session_state.strava_token:
-    tk = auth_svc.exchange_token(st.query_params["code"])
-    if tk: st.session_state.strava_token = tk; st.query_params.clear(); st.rerun()
+    with st.spinner("Autenticazione..."):
+        tk = auth_svc.exchange_token(st.query_params["code"])
+        if tk: st.session_state.strava_token = tk; st.query_params.clear(); st.rerun()
 
 st.title("🏃‍♂️ SCORE 4.0 Lab")
 
 if st.session_state.strava_token:
-    if st.button("🚀 Scarica e Analizza", type="primary"):
-        with st.spinner("Analisi bio-meccanica in corso..."):
+    if st.button("🚀 Scarica e Analizza", type="primary", use_container_width=True):
+        with st.spinner("Elaborazione algoritmi SCORE..."):
             weather_svc = WeatherService()
             engine = ScoreEngine()
             raw = auth_svc.get_activities(st.session_state.strava_token["access_token"], 10)
@@ -209,8 +253,7 @@ if st.session_state.strava_token:
                 s, str_ = d['summary'], d['streams']
                 dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
                 lat_lng = s.get('start_latlng', [])
-                temp, hum = 20.0, 50.0
-                source_w = "Def"
+                temp, hum, source_w = 20.0, 50.0, "Def"
                 
                 if lat_lng:
                     api_t, api_h = weather_svc.get_historical_weather(lat_lng[0], lat_lng[1], dt.strftime("%Y-%m-%d"), dt.hour)
@@ -222,7 +265,7 @@ if st.session_state.strava_token:
                 rnk_lbl, _ = engine.get_rank(score)
                 
                 processed.append({
-                    "id": s['id'], # ID per selezione
+                    "id": s['id'],
                     "Data": dt.strftime("%Y-%m-%d"),
                     "Dist (km)": round(mets.distance_meters/1000, 2),
                     "Power": int(mets.avg_power),
@@ -233,83 +276,81 @@ if st.session_state.strava_token:
                     "WR_Pct": round(wr_p, 1),
                     "Rank": rnk_lbl,
                     "Meteo": f"{temp}°C ({source_w})",
-                    # Salviamo i dati grezzi per Deep Dive (Opzione C)
                     "raw_watts": str_['watts']['data'],
-                    "raw_hr": str_['heartrate']['data'],
-                    "raw_time": str_.get('time', {}).get('data', [])
+                    "raw_hr": str_['heartrate']['data']
                 })
             st.session_state.analyzed_data = processed
             st.rerun()
 
-    # --- VISUALIZZAZIONE A TAB ---
+    # --- TAB VISUALIZATION ---
     if st.session_state.analyzed_data:
-        tab1, tab2 = st.tabs(["📊 Dashboard Generale", "🔬 Deep Dive & AI Coach"])
+        tab1, tab2 = st.tabs(["📊 Dashboard", "🔬 Deep Dive & Zone"])
         
         df = pd.DataFrame(st.session_state.analyzed_data)
 
-        # TAB 1: OVERVIEW
+        # TAB 1
         with tab1:
-            st.dataframe(df.drop(columns=['id', 'raw_watts', 'raw_hr', 'raw_time']), use_container_width=True, hide_index=True)
-            
-            # Grafico WR Benchmark
-            base = alt.Chart(df).encode(x='Dist (km)')
-            pts = base.mark_circle(size=100).encode(y='WR_Pct', tooltip=['Data', 'SCORE'])
-            line = base.mark_line().encode(y='WR_Pct')
-            st.altair_chart((pts + line).interactive(), use_container_width=True)
+            st.dataframe(df.drop(columns=['id', 'raw_watts', 'raw_hr']), use_container_width=True, hide_index=True)
+            st.subheader("Benchmark Mondiale (Riegel)")
+            chart = alt.Chart(df).mark_circle(size=120).encode(
+                x=alt.X('Dist (km)', scale=alt.Scale(zero=False)),
+                y=alt.Y('WR_Pct', title='% Velocità Record Mondo'),
+                color=alt.Color('WR_Pct', scale=alt.Scale(scheme='magma')),
+                tooltip=['Data', 'SCORE', 'WR_Pct']
+            ).interactive()
+            st.altair_chart(chart, use_container_width=True)
 
-        # TAB 2: DEEP DIVE + AI
+        # TAB 2
         with tab2:
-            # Select Box per scegliere la corsa
-            run_options = {r['id']: f"{r['Data']} - {r['Dist (km)']}km" for r in st.session_state.analyzed_data}
-            sel_id = st.selectbox("Seleziona Corsa da analizzare:", list(run_options.keys()), format_func=lambda x: run_options[x])
-            
-            # Recupera dati corsa selezionata
+            run_opts = {r['id']: f"{r['Data']} - {r['Dist (km)']}km" for r in st.session_state.analyzed_data}
+            sel_id = st.selectbox("Seleziona Attività:", list(run_opts.keys()), format_func=lambda x: run_opts[x])
             sel_run = next(r for r in st.session_state.analyzed_data if r['id'] == sel_id)
             
-            col_ai, col_charts = st.columns([1, 2])
+            col_left, col_right = st.columns([1, 2])
             
-            with col_ai:
-                st.subheader("🤖 Coach Corner")
+            with col_left:
+                st.subheader("🤖 Coach AI")
                 if ai_key:
-                    if st.button("Chiedi al Coach", type="primary"):
-                        coach = AICoachService(ai_key)
-                        with st.spinner("Il coach sta studiando i dati..."):
-                            feedback = coach.get_coach_feedback(sel_run)
-                            st.markdown(feedback)
-                else:
-                    st.info("Inserisci la Gemini API Key nella sidebar per attivare il coach.")
+                    if st.button("Analizza Sessione"):
+                        with st.spinner("Analisi in corso..."):
+                            coach = AICoachService(ai_key)
+                            st.markdown(coach.get_coach_feedback(sel_run))
+                else: st.warning("Serve API Key Gemini.")
                 
                 st.divider()
-                st.metric("Disaccoppiamento (Pw:Hr)", f"{sel_run['Decoupling']}%", 
-                          help="Positivo alto (>5%) = perdita efficienza aerobica. Negativo = scarsa forma o partenza troppo forte.")
+                st.metric("Disaccoppiamento", f"{sel_run['Decoupling']}%", delta_color="inverse")
 
-            with col_charts:
-                st.subheader("📈 Analisi Avanzata")
+            with col_right:
+                engine = ScoreEngine()
                 
-                # Creiamo DF per i grafici di dettaglio
-                # Assumiamo che le lunghezze delle liste siano uguali (controllato nel motore)
+                # 1. Scatter HR/Power
+                st.subheader("Efficienza Aerobica")
                 min_len = min(len(sel_run['raw_watts']), len(sel_run['raw_hr']))
-                detail_df = pd.DataFrame({
-                    'Time': range(min_len), # O usa raw_time se disponibile
-                    'Watts': sel_run['raw_watts'][:min_len],
-                    'HR': sel_run['raw_hr'][:min_len]
-                })
-
-                # 1. Distribuzione Potenza
-                hist = alt.Chart(detail_df).mark_bar().encode(
-                    alt.X("Watts", bin=alt.Bin(maxbins=20)),
-                    y='count()',
-                    color=alt.value("#1f77b4")
-                ).properties(title="Distribuzione Potenza (W)", height=200)
-                st.altair_chart(hist, use_container_width=True)
+                dd = pd.DataFrame({'Watts': sel_run['raw_watts'][:min_len], 'HR': sel_run['raw_hr'][:min_len], 'Time': range(min_len)})
                 
-                # 2. Scatter HR vs Power
-                scatter = alt.Chart(detail_df).mark_circle(size=10, opacity=0.3).encode(
-                    x=alt.X('Watts', title='Potenza (W)'),
-                    y=alt.Y('HR', title='Frequenza Cardiaca (bpm)'),
-                    color=alt.Color('Time', title='Progressione Tempo', scale=alt.Scale(scheme='plasma'))
-                ).properties(title="Correlazione HR vs Power (Colore = Tempo)", height=300).interactive()
-                st.altair_chart(scatter, use_container_width=True)
+                scat = alt.Chart(dd).mark_circle(opacity=0.3).encode(
+                    x='Watts', y=alt.Y('HR', scale=alt.Scale(zero=False)), 
+                    color=alt.Color('Time', title='Tempo', scale=alt.Scale(scheme='plasma'))
+                ).properties(height=250).interactive()
+                st.altair_chart(scat, use_container_width=True)
+                
+                # 2. Zone Distribuzione (NUOVO)
+                st.subheader(f"🚦 Distribuzione Zone (FTP: {ftp}W)")
+                zones_data = engine.calculate_zones(sel_run['raw_watts'], ftp)
+                
+                if zones_data:
+                    z_df = pd.DataFrame(zones_data)
+                    bars = alt.Chart(z_df).mark_bar().encode(
+                        x=alt.X('Percent', title='% Tempo'),
+                        y=alt.Y('Zone', sort=None),
+                        color=alt.Color('Color', scale=None),
+                        tooltip=['Zone', 'Percent', 'Minutes']
+                    ).properties(height=250)
+                    
+                    text = bars.mark_text(dx=3, align='left').encode(text=alt.Text('Percent', format='.1f'))
+                    st.altair_chart(bars + text, use_container_width=True)
+                else:
+                    st.info("Dati potenza insufficienti o FTP a 0.")
 
 else:
-    st.info("👈 Connettiti a Strava per iniziare.")
+    st.info("👈 Effettua il Login Strava dalla sidebar.")
