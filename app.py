@@ -2,12 +2,21 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import requests
-from datetime import datetime, timedelta
+import altair as alt
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+# --- CONFIGURAZIONE PAGINA ---
+st.set_page_config(
+    page_title="SCORE 4.0 Pro",
+    page_icon="🏃‍♂️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # ==========================================
-# 1. DOMAIN LAYER: SCORE 4.0 ENGINE
+# 1. DOMAIN LAYER: ENTITIES & ENGINE
 # ==========================================
 
 @dataclass
@@ -24,17 +33,32 @@ class RunMetrics:
     humidity: float
 
 class ScoreEngine:
-    W_REF_SPEC = 6.0       
-    REF_PACE_SEC_KM = 153.0 
-    ALPHA = 0.8            
+    """
+    Motore di calcolo SCORE 4.0 con Benchmark Riegel (World Record).
+    """
+    W_REF_SPEC = 6.0        # W/kg Elite Reference
+    ALPHA = 0.8             # Sensibilità deriva aerobica
+    
+    # Parametri Riegel calibrati su WR Maratona (~2h00m35s per 42195m)
+    # Formula: T_ref = T_base * (Dist / Dist_base) ^ 1.06
+    WR_BASE_DIST = 42195.0
+    WR_BASE_TIME = 7235.0   # Secondi
+    RIEGEL_EXP = 1.06
 
     @staticmethod
-    def calculate_decoupling(power_stream, hr_stream):
+    def get_world_record_time(distance_meters: float) -> float:
+        """Calcola il tempo teorico WR per una data distanza usando Riegel."""
+        if distance_meters <= 0: return 1.0
+        return ScoreEngine.WR_BASE_TIME * (distance_meters / ScoreEngine.WR_BASE_DIST) ** ScoreEngine.RIEGEL_EXP
+
+    @staticmethod
+    def calculate_decoupling(power_stream: list, hr_stream: list) -> float:
+        """Calcola il disaccoppiamento aerobico (Pw:Hr)."""
         if not power_stream or not hr_stream or len(power_stream) != len(hr_stream):
             return 0.0
         
         half = len(power_stream) // 2
-        if half < 60: return 0.0 
+        if half < 60: return 0.0  # Troppo breve
 
         p1 = np.mean(power_stream[:half])
         h1 = np.mean(hr_stream[:half])
@@ -46,42 +70,50 @@ class ScoreEngine:
         ratio1 = p1 / h1
         ratio2 = p2 / h2
         
+        # Decoupling = (Ratio1 - Ratio2) / Ratio1
         return (ratio1 - ratio2) / ratio1
 
-    def compute_score(self, metrics: RunMetrics, decoupling: float):
-        # 1. Potenza Normalizzata (Ascesa)
+    def compute_score(self, metrics: RunMetrics, decoupling: float) -> Tuple[float, float, float]:
+        """
+        Ritorna: (SCORE, WCF, WR_Percent)
+        """
+        # 1. Potenza Normalizzata (Correzione Ascesa)
         grade = metrics.ascent_meters / metrics.distance_meters if metrics.distance_meters > 0 else 0
         w_adj = metrics.avg_power * (1 + grade)
 
-        # 2. Efficienza Normalizzata
+        # 2. Efficienza Normalizzata (vs 6.0 W/kg)
         w_spec = w_adj / metrics.weight_kg
         term_efficiency = w_spec / self.W_REF_SPEC
 
         # 3. Costo Cardiaco (HRR)
         hrr_percent = (metrics.avg_hr - metrics.hr_rest) / (metrics.hr_max - metrics.hr_rest)
-        hrr_percent = max(0.05, hrr_percent) 
+        hrr_percent = max(0.05, hrr_percent) # Clamp minimo
         term_hrr = 1 / hrr_percent
 
         # 4. Weather Correction Factor (WCF)
-        # Nota: WCF premia chi corre al caldo o con alta umidità
+        # Premia chi corre al caldo o con alta umidità
         term_weather = 1.0 + \
                        max(0, 0.012 * (metrics.temp_c - 20)) + \
                        max(0, 0.005 * (metrics.humidity - 60))
 
-        # 5. Performance Factor (P)
-        t_ref_seconds = (metrics.distance_meters / 1000.0) * self.REF_PACE_SEC_KM
-        term_p = t_ref_seconds / max(1, metrics.duration_seconds)
+        # 5. Performance Factor Dinamico (vs World Record)
+        t_wr_seconds = self.get_world_record_time(metrics.distance_meters)
+        term_p = t_wr_seconds / max(1, metrics.duration_seconds)
 
         # 6. Stabilità Cardiovascolare
         t_hours = metrics.duration_seconds / 3600.0
         term_stability = np.exp(-self.ALPHA * abs(decoupling) / np.sqrt(max(0.1, t_hours)))
 
+        # Formula Finale
         score = (term_efficiency * term_hrr * term_weather) * term_p * term_stability
         
-        return score, term_weather
+        # Calcolo percentuale rispetto al WR (per statistiche)
+        wr_percent = term_p * 100 
+
+        return score, term_weather, wr_percent
 
     @staticmethod
-    def get_rank(score):
+    def get_rank(score: float) -> Tuple[str, str]:
         if score >= 4.0: return "🏆 Classe Mondiale", "success"
         if score >= 3.0: return "🥇 Livello Nazionale", "success"
         if score >= 2.0: return "🥈 Livello Regionale", "warning"
@@ -93,17 +125,11 @@ class ScoreEngine:
 # ==========================================
 
 class WeatherService:
-    """Gestisce il recupero dati meteo storici da Open-Meteo Archive API"""
-    
     BASE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
     @staticmethod
-    @st.cache_data(ttl=86400, show_spinner=False) # Cache 24h
+    @st.cache_data(ttl=86400, show_spinner=False)
     def get_historical_weather(lat: float, lon: float, date_str: str, hour: int) -> Tuple[Optional[float], Optional[float]]:
-        """
-        Recupera Temp e Umidità per una specifica coordinata e ora passata.
-        date_str format: 'YYYY-MM-DD'
-        """
         try:
             params = {
                 "latitude": lat,
@@ -113,65 +139,88 @@ class WeatherService:
                 "hourly": "temperature_2m,relative_humidity_2m",
                 "timezone": "auto"
             }
-            
-            response = requests.get(WeatherService.BASE_URL, params=params)
-            response.raise_for_status()
-            data = response.json()
-            
-            # L'API restituisce un array di 24 ore. Prendiamo l'indice dell'ora della corsa.
-            # Se l'ora è fuori range (es. 24), clampiamo a 23.
+            res = requests.get(WeatherService.BASE_URL, params=params)
+            res.raise_for_status()
+            data = res.json()
             idx = min(hour, 23)
-            
             temp = data['hourly']['temperature_2m'][idx]
             hum = data['hourly']['relative_humidity_2m'][idx]
-            
             return temp, hum
         except Exception as e:
-            # Silenzioso: se fallisce il meteo, non vogliamo bloccare l'app
-            print(f"Weather API Error: {e}") 
             return None, None
 
 class StravaService:
-    BASE_URL = "https://www.strava.com/api/v3"
+    AUTH_URL = "https://www.strava.com/oauth/authorize"
+    TOKEN_URL = "https://www.strava.com/oauth/token"
+    API_URL = "https://www.strava.com/api/v3"
 
-    def __init__(self, client_id, client_secret, refresh_token):
-        self.auth = {
-            'client_id': client_id,
-            'client_secret': client_secret,
-            'refresh_token': refresh_token,
-            'grant_type': 'refresh_token'
+    def __init__(self, client_id: str, client_secret: str):
+        self.client_id = client_id
+        self.client_secret = client_secret
+
+    def get_authorization_link(self, redirect_uri: str) -> str:
+        params = {
+            "client_id": self.client_id,
+            "response_type": "code",
+            "redirect_uri": redirect_uri,
+            "approval_prompt": "force",
+            "scope": "activity:read_all,profile:read_all"
         }
-        self.access_token = None
+        query = "&".join([f"{k}={v}" for k, v in params.items()])
+        return f"{self.AUTH_URL}?{query}"
 
-    def authenticate(self):
+    def exchange_code_for_token(self, code: str) -> dict:
+        payload = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "code": code,
+            "grant_type": "authorization_code"
+        }
         try:
-            res = requests.post("https://www.strava.com/oauth/token", data=self.auth)
+            res = requests.post(self.TOKEN_URL, data=payload)
             res.raise_for_status()
-            self.access_token = res.json()['access_token']
-            return True
-        except Exception:
-            return False
+            return res.json()
+        except Exception as e:
+            st.error(f"Errore Auth: {e}")
+            return None
 
-    def get_activities(self, limit=5):
-        if not self.access_token: return []
-        headers = {'Authorization': f'Bearer {self.access_token}'}
-        
+    def refresh_access_token(self, refresh_token: str) -> str:
+        payload = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token"
+        }
         try:
-            activities = requests.get(
-                f"{self.BASE_URL}/athlete/activities", 
+            res = requests.post(self.TOKEN_URL, data=payload)
+            res.raise_for_status()
+            return res.json().get("access_token")
+        except Exception:
+            return None
+
+    def get_activities(self, access_token: str, limit: int = 5) -> list:
+        headers = {'Authorization': f'Bearer {access_token}'}
+        try:
+            # 1. Fetch Summary
+            act_res = requests.get(
+                f"{self.API_URL}/athlete/activities", 
                 headers=headers, 
                 params={'per_page': limit}
-            ).json()
+            )
+            if act_res.status_code == 401: return None # Token scaduto
             
+            activities = act_res.json()
             full_data = []
-            prog_bar = st.progress(0, text="Analisi flussi e meteo...")
+            
+            # Progress Bar
+            prog_bar = st.progress(0, text="Scaricamento flussi dati...")
             
             for i, act in enumerate(activities):
-                if act.get('type') == 'Run' and act.get('device_watts', False):
+                # Filtro: Solo corse con misuratore di potenza (o stima Strava)
+                if act.get('type') == 'Run': # Opzionale: and act.get('device_watts', False):
                     act_id = act['id']
-                    # Stream di base
                     streams = requests.get(
-                        f"{self.BASE_URL}/activities/{act_id}/streams",
+                        f"{self.API_URL}/activities/{act_id}/streams",
                         headers=headers,
                         params={'keys': 'watts,heartrate', 'key_by_type': 'true'}
                     ).json()
@@ -184,132 +233,216 @@ class StravaService:
             prog_bar.empty()
             return full_data
         except Exception as e:
-            st.error(f"Errore Fetch Dati: {e}")
+            st.error(f"Errore API Strava: {e}")
             return []
 
 # ==========================================
-# 3. PRESENTATION LAYER: STREAMLIT APP
+# 3. PRESENTATION LAYER: UI & LOGIC
 # ==========================================
 
-st.set_page_config(page_title="SCORE 4.0 Pro", layout="wide")
+# Gestione Session State
+if "strava_token" not in st.session_state:
+    st.session_state.strava_token = None
 
-st.title("🏃‍♂️ SCORE 4.0 Competitive Index")
-st.markdown("Algoritmo con correzione climatica automatica (Open-Meteo API).")
+st.title("🏃‍♂️ SCORE 4.0 Analysis")
+st.markdown("Metrics for Bio-Mechanical Efficiency & Competitive Ranking")
 
-# --- SIDEBAR ---
+# --- SIDEBAR: CONFIGURAZIONE & AUTH ---
 with st.sidebar:
-    st.header("👤 Profilo Atleta")
-    weight = st.number_input("Peso (kg)", value=70.0, step=0.5)
-    hr_max = st.number_input("FC Max", value=185, step=1)
-    hr_rest = st.number_input("FC Riposo", value=50, step=1)
+    st.header("⚙️ Impostazioni")
     
-    st.divider()
-    st.header("🔗 Connessione")
-    
-    # Auto-load secrets se presenti
+    # Credenziali (Caricamento sicuro o Manuale)
+    # Hint: Usa .streamlit/secrets.toml in produzione
     def_cid = st.secrets.get("strava", {}).get("client_id", "")
     def_csec = st.secrets.get("strava", {}).get("client_secret", "")
-    def_rtok = st.secrets.get("strava", {}).get("refresh_token", "")
-
+    
     c_id = st.text_input("Client ID", value=def_cid)
-    c_sec = st.text_input("Client Secret", type="password", value=def_csec)
-    r_tok = st.text_input("Refresh Token", type="password", value=def_rtok)
+    c_sec = st.text_input("Client Secret", value=def_csec, type="password")
     
-    do_analysis = st.button("🚀 Analizza Corse", type="primary")
+    auth_svc = StravaService(c_id, c_sec)
+    
+    st.divider()
+    
+    # Gestione Connessione
+    if st.session_state.strava_token:
+        st.success("✅ Strava Connesso")
+        if st.button("Disconnetti", use_container_width=True):
+            st.session_state.strava_token = None
+            st.rerun()
+    else:
+        st.info("Connetti il tuo account per analizzare le attività.")
+        if c_id and c_sec:
+            # URL Redirect (Modificare in produzione)
+            redirect_uri = "http://localhost:8501" 
+            link = auth_svc.get_authorization_link(redirect_uri)
+            st.link_button("🔗 Connetti a Strava", link, type="primary", use_container_width=True)
+        else:
+            st.warning("Inserisci le credenziali Strava.")
 
-# --- MAIN LOGIC ---
-if do_analysis and c_id and r_tok:
-    strava_svc = StravaService(c_id, c_sec, r_tok)
-    weather_svc = WeatherService()
-    engine = ScoreEngine()
-    
-    if strava_svc.authenticate():
-        raw_data = strava_svc.get_activities(limit=10)
+    st.divider()
+    st.header("👤 Profilo Atleta")
+    weight = st.number_input("Peso (kg)", 70.0, step=0.5)
+    hr_max = st.number_input("FC Max", 185)
+    hr_rest = st.number_input("FC Riposo", 50)
+
+# --- MAIN: AUTH CALLBACK HANDLER ---
+# Gestisce il ritorno da Strava (es. localhost:8501/?code=...)
+if "code" in st.query_params and not st.session_state.strava_token:
+    code = st.query_params["code"]
+    with st.spinner("Autenticazione in corso..."):
+        tokens = auth_svc.exchange_code_for_token(code)
+        if tokens:
+            st.session_state.strava_token = tokens
+            st.success("Login effettuato!")
+            st.query_params.clear() # Pulisce l'URL
+            st.rerun()
+        else:
+            st.error("Login fallito.")
+
+# --- MAIN: ANALISI DATI ---
+if st.session_state.strava_token:
+    if st.button("🚀 Analizza le mie corse", type="primary"):
+        weather_svc = WeatherService()
+        engine = ScoreEngine()
+        
+        # 1. Fetch Dati
+        token_dict = st.session_state.strava_token
+        access_token = token_dict["access_token"]
+        
+        raw_data = auth_svc.get_activities(access_token, limit=10)
+        
+        # Gestione Token Scaduto
+        if raw_data is None: 
+            new_access = auth_svc.refresh_access_token(token_dict["refresh_token"])
+            if new_access:
+                st.session_state.strava_token["access_token"] = new_access
+                raw_data = auth_svc.get_activities(new_access, limit=10)
+            else:
+                st.error("Sessione scaduta. Riconnettiti.")
+                st.stop()
+
         results = []
         
-        for d in raw_data:
-            summary = d['summary']
-            streams = d['streams']
-            
-            # 1. Parsing Data e Ora
-            start_date_local = summary['start_date_local'] # es. "2023-10-27T10:00:00Z"
-            dt_obj = datetime.strptime(start_date_local, "%Y-%m-%dT%H:%M:%SZ")
-            date_str = dt_obj.strftime("%Y-%m-%d")
-            hour = dt_obj.hour
-            
-            # 2. Logica Meteo Avanzata
-            lat_lng = summary.get('start_latlng', [])
-            
-            final_temp = 20.0 # Fallback
-            final_hum = 50.0  # Fallback
-            source_weather = "Default"
-
-            if lat_lng and len(lat_lng) == 2:
-                lat, lon = lat_lng[0], lat_lng[1]
-                # Chiamata API Meteo (Cachata)
-                api_temp, api_hum = weather_svc.get_historical_weather(lat, lon, date_str, hour)
+        # 2. Elaborazione
+        if raw_data:
+            for d in raw_data:
+                summary = d['summary']
+                streams = d['streams']
                 
-                if api_temp is not None:
-                    final_temp = api_temp
-                    final_hum = api_hum
-                    source_weather = "API 🌤"
+                # Parsing Date/Time
+                start_date = summary['start_date_local']
+                dt_obj = datetime.strptime(start_date, "%Y-%m-%dT%H:%M:%SZ")
+                date_str = dt_obj.strftime("%Y-%m-%d")
+                
+                # Meteo Logic
+                lat_lng = summary.get('start_latlng', [])
+                temp, hum = 20.0, 50.0 # Defaults
+                source_weather = "Default"
+                
+                if lat_lng:
+                    api_t, api_h = weather_svc.get_historical_weather(lat_lng[0], lat_lng[1], date_str, dt_obj.hour)
+                    if api_t is not None:
+                        temp, hum = api_t, api_h
+                        source_weather = "API 🌤"
+
+                # Costruzione Metriche
+                metrics = RunMetrics(
+                    avg_power=summary.get('average_watts', 0),
+                    avg_hr=summary.get('average_heartrate', 0),
+                    distance_meters=summary.get('distance', 0),
+                    duration_seconds=summary.get('moving_time', 0),
+                    ascent_meters=summary.get('total_elevation_gain', 0),
+                    weight_kg=weight,
+                    hr_max=hr_max,
+                    hr_rest=hr_rest,
+                    temp_c=temp,
+                    humidity=hum
+                )
+                
+                # Calcolo Motore
+                decoupling = engine.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
+                score, wcf, wr_pct = engine.compute_score(metrics, decoupling)
+                rank_lbl, rank_col = engine.get_rank(score)
+                
+                results.append({
+                    "Data": date_str,
+                    "Dist (km)": float(f"{metrics.distance_meters/1000:.2f}"),
+                    "Dist_Raw": metrics.distance_meters, # Nascosto, per calcoli
+                    "Speed_kmh": (metrics.distance_meters/1000) / (metrics.duration_seconds/3600),
+                    "Power": int(metrics.avg_power),
+                    "HR": int(metrics.avg_hr),
+                    "Decoupling": float(f"{decoupling*100:.1f}"),
+                    "WCF": float(f"{wcf:.2f}"),
+                    "SCORE": float(f"{score:.2f}"),
+                    "WR_Pct": float(f"{wr_pct:.1f}"),
+                    "Rank": rank_lbl
+                })
+
+        # 3. Visualizzazione
+        if results:
+            df = pd.DataFrame(results).sort_values(by="Data", ascending=False)
             
-            # 3. Costruzione Metriche
-            metrics = RunMetrics(
-                avg_power=summary.get('average_watts', 0),
-                avg_hr=summary.get('average_heartrate', 0),
-                distance_meters=summary.get('distance', 0),
-                duration_seconds=summary.get('moving_time', 0),
-                ascent_meters=summary.get('total_elevation_gain', 0),
-                weight_kg=weight,
-                hr_max=hr_max,
-                hr_rest=hr_rest,
-                temp_c=final_temp,
-                humidity=final_hum
-            )
+            # --- KPI ULTIMA CORSA ---
+            last = df.iloc[0]
+            st.divider()
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Ultimo SCORE", f"{last['SCORE']}", delta=last['Rank'].split(" ")[0])
+            c2.metric("Livello WR", f"{last['WR_Pct']}%", help="% Velocità rispetto al Record del Mondo")
+            c3.metric("WCF (Meteo)", f"{last['WCF']}x", help="Bonus meteo applicato")
+            c4.metric("Disaccoppiamento", f"{last['Decoupling']}%", delta_color="inverse")
+
+            # --- ANALISI COMPARATIVA (RIEGEL) ---
+            st.markdown("### 🌍 Analisi Benchmark vs World Record")
             
-            # 4. Calcoli Motore
-            decoupling = engine.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
-            score_val, wcf_val = engine.compute_score(metrics, decoupling)
-            rank_label, rank_color = engine.get_rank(score_val)
+            median_wr = df['WR_Pct'].median()
+            st.caption(f"La tua mediana globale è il **{median_wr:.1f}%** del passo World Record.")
+
+            # Creazione Grafico Curva WR
+            x_vals = np.linspace(1000, 50000, 100) # Da 1km a 50km
+            # Calcolo velocità WR (km/h) per ogni distanza
+            y_wr_kmh = [(d/1000) / (engine.get_world_record_time(d)/3600) for d in x_vals]
             
-            results.append({
-                "Data": date_str,
-                "Dist (km)": f"{metrics.distance_meters/1000:.1f}",
-                "Power (W)": f"{metrics.avg_power:.0f}",
-                "Meteo": f"{final_temp:.1f}°C / {final_hum:.0f}% ({source_weather})",
-                "WCF": f"{wcf_val:.2f}x",
-                "Decoupling": f"{decoupling*100:.1f}%",
-                "SCORE": score_val, # Tengo numerico per ordinamento
-                "Rank": rank_label
+            # DataFrame Curva WR
+            wr_df = pd.DataFrame({
+                'Dist (km)': x_vals/1000,
+                'Speed (km/h)': y_wr_kmh,
+                'Tipo': 'World Record 🌍'
             })
             
-        if results:
-            df = pd.DataFrame(results)
+            # DataFrame Utente
+            user_df = df[['Dist (km)', 'Speed_kmh']].copy()
+            user_df['Tipo'] = 'Le tue Corse 🏃'
+            user_df.rename(columns={'Speed_kmh': 'Speed (km/h)'}, inplace=True)
             
-            # KPI Ultima Corsa
-            last_run = df.iloc[0]
-            st.divider()
+            # Merge per Altair
+            chart_data = pd.concat([wr_df, user_df], ignore_index=True)
             
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Ultimo SCORE", f"{last_run['SCORE']:.2f}")
-            c2.metric("Livello", last_run['Rank'].split(" ")[1])
-            c3.metric("WCF (Meteo)", last_run['WCF'], help="Moltiplicatore bonus per condizioni avverse")
-            c4.metric("Dati Meteo", last_run['Meteo'])
-
             # Grafico
-            st.subheader("Storico Analisi")
-            chart_df = df.sort_values(by="Data")
-            st.line_chart(chart_df.set_index('Data')[['SCORE']])
+            chart = alt.Chart(chart_data).mark_line(point=True).encode(
+                x=alt.X('Dist (km)', scale=alt.Scale(domain=[0, 50])),
+                y=alt.Y('Speed (km/h)', scale=alt.Scale(zero=False)),
+                color=alt.Color('Tipo', scale=alt.Scale(domain=['World Record 🌍', 'Le tue Corse 🏃'], range=['#FF4B4B', '#1F77B4'])),
+                tooltip=['Dist (km)', 'Speed (km/h)', 'Tipo']
+            ).properties(height=350, title="Curva Fatiga/Velocità").interactive()
             
-            # Tabella formattata
+            st.altair_chart(chart, use_container_width=True)
+
+            # --- TABELLA DATI ---
+            st.markdown("### 📝 Storico Dettagliato")
             st.dataframe(
-                df.style.format({"SCORE": "{:.2f}"}), 
+                df[['Data', 'Dist (km)', 'Power', 'HR', 'Decoupling', 'WCF', 'WR_Pct', 'SCORE', 'Rank']],
                 use_container_width=True,
                 hide_index=True
             )
             
         else:
-            st.warning("Nessuna attività con dati di Potenza+FC trovata.")
-    else:
-        st.error("Impossibile autenticarsi con Strava.")
+            st.warning("Nessuna corsa valida trovata (verifica che ci siano dati di Potenza e FC).")
+
+else:
+    # Landing Page State
+    st.markdown("""
+    <div style='text-align: center; margin-top: 50px;'>
+        <h2>Benvenuto in SCORE 4.0</h2>
+        <p>Connetti il tuo account Strava per accedere all'analisi professionale.</p>
+    </div>
+    """, unsafe_allow_html=True)
