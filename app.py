@@ -1,240 +1,315 @@
 import streamlit as st
-import json
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
-# --- CONFIGURAZIONE PAGINA ---
-st.set_page_config(
-    page_title="SCORE Run Analyzer",
-    layout="centered"
-)
+# ==========================================
+# 1. DOMAIN LAYER: SCORE 4.0 ENGINE
+# ==========================================
 
-# --- MOTORE DI CALCOLO ---
-class ScoreAnalyzer:
-    def __init__(self, weight=70.0):
-        self.WEIGHT = weight
-        self.W_REF_SPEC = 6.0       
-        self.BPM_REST = 60.0        
-        self.REF_PACE = 153.0       
-        self.ALPHA = 0.8            
+@dataclass
+class RunMetrics:
+    avg_power: float
+    avg_hr: float
+    distance_meters: float
+    duration_seconds: int
+    ascent_meters: float
+    weight_kg: float
+    hr_max: int
+    hr_rest: int
+    temp_c: float
+    humidity: float
 
-    def analyze(self, data, source_type="file"):
+class ScoreEngine:
+    W_REF_SPEC = 6.0       
+    REF_PACE_SEC_KM = 153.0 
+    ALPHA = 0.8            
+
+    @staticmethod
+    def calculate_decoupling(power_stream, hr_stream):
+        if not power_stream or not hr_stream or len(power_stream) != len(hr_stream):
+            return 0.0
+        
+        half = len(power_stream) // 2
+        if half < 60: return 0.0 
+
+        p1 = np.mean(power_stream[:half])
+        h1 = np.mean(hr_stream[:half])
+        p2 = np.mean(power_stream[half:])
+        h2 = np.mean(hr_stream[half:])
+
+        if h1 == 0 or h2 == 0: return 0.0
+
+        ratio1 = p1 / h1
+        ratio2 = p2 / h2
+        
+        return (ratio1 - ratio2) / ratio1
+
+    def compute_score(self, metrics: RunMetrics, decoupling: float):
+        # 1. Potenza Normalizzata (Ascesa)
+        grade = metrics.ascent_meters / metrics.distance_meters if metrics.distance_meters > 0 else 0
+        w_adj = metrics.avg_power * (1 + grade)
+
+        # 2. Efficienza Normalizzata
+        w_spec = w_adj / metrics.weight_kg
+        term_efficiency = w_spec / self.W_REF_SPEC
+
+        # 3. Costo Cardiaco (HRR)
+        hrr_percent = (metrics.avg_hr - metrics.hr_rest) / (metrics.hr_max - metrics.hr_rest)
+        hrr_percent = max(0.05, hrr_percent) 
+        term_hrr = 1 / hrr_percent
+
+        # 4. Weather Correction Factor (WCF)
+        # Nota: WCF premia chi corre al caldo o con alta umidità
+        term_weather = 1.0 + \
+                       max(0, 0.012 * (metrics.temp_c - 20)) + \
+                       max(0, 0.005 * (metrics.humidity - 60))
+
+        # 5. Performance Factor (P)
+        t_ref_seconds = (metrics.distance_meters / 1000.0) * self.REF_PACE_SEC_KM
+        term_p = t_ref_seconds / max(1, metrics.duration_seconds)
+
+        # 6. Stabilità Cardiovascolare
+        t_hours = metrics.duration_seconds / 3600.0
+        term_stability = np.exp(-self.ALPHA * abs(decoupling) / np.sqrt(max(0.1, t_hours)))
+
+        score = (term_efficiency * term_hrr * term_weather) * term_p * term_stability
+        
+        return score, term_weather
+
+    @staticmethod
+    def get_rank(score):
+        if score >= 4.0: return "🏆 Classe Mondiale", "success"
+        if score >= 3.0: return "🥇 Livello Nazionale", "success"
+        if score >= 2.0: return "🥈 Livello Regionale", "warning"
+        if score >= 1.0: return "🥉 Runner Avanzato", "info"
+        return "👟 Amatore / Recupero", "secondary"
+
+# ==========================================
+# 2. INFRASTRUCTURE LAYER: SERVICES
+# ==========================================
+
+class WeatherService:
+    """Gestisce il recupero dati meteo storici da Open-Meteo Archive API"""
+    
+    BASE_URL = "https://archive-api.open-meteo.com/v1/archive"
+
+    @staticmethod
+    @st.cache_data(ttl=86400, show_spinner=False) # Cache 24h
+    def get_historical_weather(lat: float, lon: float, date_str: str, hour: int) -> Tuple[Optional[float], Optional[float]]:
+        """
+        Recupera Temp e Umidità per una specifica coordinata e ora passata.
+        date_str format: 'YYYY-MM-DD'
+        """
         try:
-            hr_samples = []
-            power_samples = []
-            distance = 0
-            duration = 0
-            ascent = 0
-            hr_max = 185
-            date_str = datetime.now().isoformat()
-
-            # --- LOGICA DI PARSING ---
-            if source_type == "strava":
-                streams = data.get('streams', {})
-                summary = data.get('summary', {})
-                
-                distance = summary.get('distance', 0)
-                duration = summary.get('moving_time', 0)
-                ascent = summary.get('total_elevation_gain', 0)
-                date_str = summary.get('start_date', date_str)
-                
-                if 'heartrate' in streams and 'watts' in streams:
-                    hr_samples = streams['heartrate']['data']
-                    power_samples = streams['watts']['data']
-                else:
-                    return None 
-                    
-            else:
-                # Parsing File JSON
-                header = data.get('DeviceLog', {}).get('Header', {})
-                distance = header.get('Distance', 0)
-                duration = header.get('Duration', 0)
-                ascent = header.get('Ascent', 0)
-                hr_max = header.get('HrMax', 185)
-                date_str = header.get('DateTime', date_str)
-                
-                samples = data.get('DeviceLog', {}).get('Samples', [])
-                for s in samples:
-                    h = s.get('HR', s.get('HeartRate'))
-                    p = s.get('Power')
-                    if h is not None and p is not None:
-                        if h < 10: h *= 60 
-                        hr_samples.append(h)
-                        power_samples.append(p)
-
-            if not hr_samples or not power_samples:
-                return None
-
-            # --- CALCOLO SCORE ---
-            avg_hr = np.mean(hr_samples)
-            avg_power = np.mean(power_samples)
-            
-            # Decoupling
-            half = len(power_samples) // 2
-            if half > 10:
-                p1 = np.mean(power_samples[:half])
-                h1 = np.mean(hr_samples[:half])
-                p2 = np.mean(power_samples[half:])
-                h2 = np.mean(hr_samples[half:])
-                ratio1 = p1/h1 if h1>0 else 0
-                ratio2 = p2/h2 if h2>0 else 0
-                decoupling = (ratio1 - ratio2) / ratio1
-            else:
-                decoupling = 0.05
-
-            grade = ascent / distance if distance > 0 else 0
-            w_adj = avg_power * (1 + grade)
-            w_spec = w_adj / self.WEIGHT
-            efficiency_term = w_spec / self.W_REF_SPEC
-            
-            hrr_percent = (avg_hr - self.BPM_REST) / (hr_max - self.BPM_REST)
-            hrr_percent = max(0.01, hrr_percent)
-            hrr_term = 1 / hrr_percent
-            wcf = 1.0 
-            t_ref = (distance / 1000.0) * self.REF_PACE
-            p_factor = t_ref / duration
-            t_hours = duration / 3600.0
-            stability = np.exp(-self.ALPHA * abs(decoupling) / np.sqrt(max(0.1, t_hours)))
-            
-            final_score = (efficiency_term * hrr_term * wcf) * p_factor * stability
-
-            return {
-                "date": pd.to_datetime(date_str).replace(tzinfo=None),
-                "score": final_score,
-                "distance_km": distance / 1000.0,
-                "duration_min": duration / 60.0,
-                "decoupling": decoupling
+            params = {
+                "latitude": lat,
+                "longitude": lon,
+                "start_date": date_str,
+                "end_date": date_str,
+                "hourly": "temperature_2m,relative_humidity_2m",
+                "timezone": "auto"
             }
+            
+            response = requests.get(WeatherService.BASE_URL, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            # L'API restituisce un array di 24 ore. Prendiamo l'indice dell'ora della corsa.
+            # Se l'ora è fuori range (es. 24), clampiamo a 23.
+            idx = min(hour, 23)
+            
+            temp = data['hourly']['temperature_2m'][idx]
+            hum = data['hourly']['relative_humidity_2m'][idx]
+            
+            return temp, hum
         except Exception as e:
-            return None
+            # Silenzioso: se fallisce il meteo, non vogliamo bloccare l'app
+            print(f"Weather API Error: {e}") 
+            return None, None
 
-# --- FUNZIONI STRAVA API ---
-def get_strava_activities(client_id, client_secret, refresh_token, limit=5):
-    auth_url = "https://www.strava.com/oauth/token"
-    payload = {
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'refresh_token': refresh_token,
-        'grant_type': 'refresh_token'
-    }
-    
-    try:
-        res = requests.post(auth_url, data=payload)
-        if res.status_code != 200:
-            st.error(f"Errore Auth Strava: {res.text}")
+class StravaService:
+    BASE_URL = "https://www.strava.com/api/v3"
+
+    def __init__(self, client_id, client_secret, refresh_token):
+        self.auth = {
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token'
+        }
+        self.access_token = None
+
+    def authenticate(self):
+        try:
+            res = requests.post("https://www.strava.com/oauth/token", data=self.auth)
+            res.raise_for_status()
+            self.access_token = res.json()['access_token']
+            return True
+        except Exception:
+            return False
+
+    def get_activities(self, limit=5):
+        if not self.access_token: return []
+        headers = {'Authorization': f'Bearer {self.access_token}'}
+        
+        try:
+            activities = requests.get(
+                f"{self.BASE_URL}/athlete/activities", 
+                headers=headers, 
+                params={'per_page': limit}
+            ).json()
+            
+            full_data = []
+            prog_bar = st.progress(0, text="Analisi flussi e meteo...")
+            
+            for i, act in enumerate(activities):
+                if act.get('type') == 'Run' and act.get('device_watts', False):
+                    act_id = act['id']
+                    # Stream di base
+                    streams = requests.get(
+                        f"{self.BASE_URL}/activities/{act_id}/streams",
+                        headers=headers,
+                        params={'keys': 'watts,heartrate', 'key_by_type': 'true'}
+                    ).json()
+                    
+                    if 'watts' in streams and 'heartrate' in streams:
+                        full_data.append({'summary': act, 'streams': streams})
+                
+                prog_bar.progress((i + 1) / limit)
+            
+            prog_bar.empty()
+            return full_data
+        except Exception as e:
+            st.error(f"Errore Fetch Dati: {e}")
             return []
-            
-        access_token = res.json()['access_token']
-        header = {'Authorization': f'Bearer {access_token}'}
-        
-        act_url = "https://www.strava.com/api/v3/athlete/activities"
-        activities = requests.get(act_url, headers=header, params={'per_page': limit}).json()
-        
-        full_data = []
-        my_bar = st.progress(0, text="Scaricamento dati da Strava...")
-        
-        for i, act in enumerate(activities):
-            act_id = act['id']
-            stream_url = f"https://www.strava.com/api/v3/activities/{act_id}/streams"
-            streams = requests.get(stream_url, headers=header, params={'keys': 'watts,heartrate', 'key_by_type': 'true'}).json()
-            
-            full_data.append({
-                "summary": act,
-                "streams": streams
-            })
-            my_bar.progress((i + 1) / limit)
-            
-        my_bar.empty()
-        return full_data
-    except Exception as e:
-        st.error(f"Errore connessione: {e}")
-        return []
 
-# --- INTERFACCIA ---
-st.title("🏃‍♂️ SCORE Run Analyzer")
+# ==========================================
+# 3. PRESENTATION LAYER: STREAMLIT APP
+# ==========================================
 
-# Inizializza le variabili per evitare NameError
-client_id = None
-client_secret = None
-refresh_token = None
-run_strava = False # Variabile pulsante
+st.set_page_config(page_title="SCORE 4.0 Pro", layout="wide")
 
+st.title("🏃‍♂️ SCORE 4.0 Competitive Index")
+st.markdown("Algoritmo con correzione climatica automatica (Open-Meteo API).")
+
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("Impostazioni")
-    weight = st.number_input("Peso (kg)", 70.0)
-    analyzer = ScoreAnalyzer(weight=weight)
+    st.header("👤 Profilo Atleta")
+    weight = st.number_input("Peso (kg)", value=70.0, step=0.5)
+    hr_max = st.number_input("FC Max", value=185, step=1)
+    hr_rest = st.number_input("FC Riposo", value=50, step=1)
     
     st.divider()
-    st.subheader("🔌 Connessione Strava")
+    st.header("🔗 Connessione")
     
-    # 1. Tenta di caricare dai Secrets
-    if 'strava' in st.secrets:
-        client_id = st.secrets['strava']['client_id']
-        client_secret = st.secrets['strava']['client_secret']
-        refresh_token = st.secrets['strava']['refresh_token']
-        st.success("🔒 Chiavi caricate dai Secrets!")
+    # Auto-load secrets se presenti
+    def_cid = st.secrets.get("strava", {}).get("client_id", "")
+    def_csec = st.secrets.get("strava", {}).get("client_secret", "")
+    def_rtok = st.secrets.get("strava", {}).get("refresh_token", "")
+
+    c_id = st.text_input("Client ID", value=def_cid)
+    c_sec = st.text_input("Client Secret", type="password", value=def_csec)
+    r_tok = st.text_input("Refresh Token", type="password", value=def_rtok)
+    
+    do_analysis = st.button("🚀 Analizza Corse", type="primary")
+
+# --- MAIN LOGIC ---
+if do_analysis and c_id and r_tok:
+    strava_svc = StravaService(c_id, c_sec, r_tok)
+    weather_svc = WeatherService()
+    engine = ScoreEngine()
+    
+    if strava_svc.authenticate():
+        raw_data = strava_svc.get_activities(limit=10)
+        results = []
+        
+        for d in raw_data:
+            summary = d['summary']
+            streams = d['streams']
+            
+            # 1. Parsing Data e Ora
+            start_date_local = summary['start_date_local'] # es. "2023-10-27T10:00:00Z"
+            dt_obj = datetime.strptime(start_date_local, "%Y-%m-%dT%H:%M:%SZ")
+            date_str = dt_obj.strftime("%Y-%m-%d")
+            hour = dt_obj.hour
+            
+            # 2. Logica Meteo Avanzata
+            lat_lng = summary.get('start_latlng', [])
+            
+            final_temp = 20.0 # Fallback
+            final_hum = 50.0  # Fallback
+            source_weather = "Default"
+
+            if lat_lng and len(lat_lng) == 2:
+                lat, lon = lat_lng[0], lat_lng[1]
+                # Chiamata API Meteo (Cachata)
+                api_temp, api_hum = weather_svc.get_historical_weather(lat, lon, date_str, hour)
+                
+                if api_temp is not None:
+                    final_temp = api_temp
+                    final_hum = api_hum
+                    source_weather = "API 🌤"
+            
+            # 3. Costruzione Metriche
+            metrics = RunMetrics(
+                avg_power=summary.get('average_watts', 0),
+                avg_hr=summary.get('average_heartrate', 0),
+                distance_meters=summary.get('distance', 0),
+                duration_seconds=summary.get('moving_time', 0),
+                ascent_meters=summary.get('total_elevation_gain', 0),
+                weight_kg=weight,
+                hr_max=hr_max,
+                hr_rest=hr_rest,
+                temp_c=final_temp,
+                humidity=final_hum
+            )
+            
+            # 4. Calcoli Motore
+            decoupling = engine.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
+            score_val, wcf_val = engine.compute_score(metrics, decoupling)
+            rank_label, rank_color = engine.get_rank(score_val)
+            
+            results.append({
+                "Data": date_str,
+                "Dist (km)": f"{metrics.distance_meters/1000:.1f}",
+                "Power (W)": f"{metrics.avg_power:.0f}",
+                "Meteo": f"{final_temp:.1f}°C / {final_hum:.0f}% ({source_weather})",
+                "WCF": f"{wcf_val:.2f}x",
+                "Decoupling": f"{decoupling*100:.1f}%",
+                "SCORE": score_val, # Tengo numerico per ordinamento
+                "Rank": rank_label
+            })
+            
+        if results:
+            df = pd.DataFrame(results)
+            
+            # KPI Ultima Corsa
+            last_run = df.iloc[0]
+            st.divider()
+            
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Ultimo SCORE", f"{last_run['SCORE']:.2f}")
+            c2.metric("Livello", last_run['Rank'].split(" ")[1])
+            c3.metric("WCF (Meteo)", last_run['WCF'], help="Moltiplicatore bonus per condizioni avverse")
+            c4.metric("Dati Meteo", last_run['Meteo'])
+
+            # Grafico
+            st.subheader("Storico Analisi")
+            chart_df = df.sort_values(by="Data")
+            st.line_chart(chart_df.set_index('Data')[['SCORE']])
+            
+            # Tabella formattata
+            st.dataframe(
+                df.style.format({"SCORE": "{:.2f}"}), 
+                use_container_width=True,
+                hide_index=True
+            )
+            
+        else:
+            st.warning("Nessuna attività con dati di Potenza+FC trovata.")
     else:
-        # 2. Altrimenti chiedi input manuale
-        client_id = st.text_input("Client ID")
-        client_secret = st.text_input("Client Secret", type="password")
-        refresh_token = st.text_input("Refresh Token", type="password")
-    
-    # IL PULSANTE È QUI (Sempre visibile)
-    run_strava = st.button("Scarica da Strava")
-
-# Main Logic
-results = []
-
-# A. FLUSSO STRAVA
-if run_strava:
-    if client_id and refresh_token:
-        strava_data = get_strava_activities(client_id, client_secret, refresh_token)
-        if strava_data:
-            for d in strava_data:
-                res = analyzer.analyze(d, source_type="strava")
-                if res: results.append(res)
-    else:
-        st.error("Mancano le chiavi Strava (Client ID o Token).")
-
-# B. FLUSSO FILE MANUALE
-uploaded_files = st.file_uploader("Oppure carica file JSON", accept_multiple_files=True)
-if uploaded_files:
-    for f in uploaded_files:
-        content = json.load(f)
-        res = analyzer.analyze(content, source_type="file")
-        if res: results.append(res)
-
-# VISUALIZZAZIONE RISULTATI
-if results:
-    df = pd.DataFrame(results).sort_values(by='date')
-    
-    # Ultima Corsa
-    last = df.iloc[-1]
-    st.divider()
-    st.subheader(f"Ultima Analisi: {last['date'].strftime('%d %b %Y')}")
-    
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.metric("SCORE 4.0", f"{last['score']:.2f}")
-    with col2:
-        st.caption("Feedback Rapido")
-        if last['score'] < 0.25: st.info("🛠 Recupero / Base")
-        elif last['score'] < 0.5: st.success("📈 Mantenimento")
-        elif last['score'] < 1.0: st.warning("🚀 Performance Alta")
-        else: st.error("🏆 Élite")
-
-    # Grafico
-    st.subheader("Trend Temporale")
-    if len(df) > 1:
-        st.line_chart(df.set_index('date')['score'])
-    else:
-        st.info("Carica più attività per vedere il grafico del trend.")
-    
-    with st.expander("Vedi Dati Grezzi"):
-        st.dataframe(df)
-else:
-    if not run_strava:
-        st.info("👈 Usa la barra laterale per connetterti a Strava o carica un file JSON qui sopra.")
+        st.error("Impossibile autenticarsi con Strava.")
