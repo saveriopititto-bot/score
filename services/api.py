@@ -1,76 +1,142 @@
-import requests
-import streamlit as st
 import google.generativeai as genai
-from typing import Optional
+import json
+import requests
+import time
+from datetime import datetime, timedelta
 
 class AICoachService:
     def __init__(self, api_key):
-        self.model = None
-        if api_key:
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+        if not api_key:
+            raise ValueError("API Key mancante")
+        
+        genai.configure(api_key=api_key)
+        
+        # Usiamo 'gemini-pro': è il modello più stabile e supportato ovunque.
+        # Se in futuro vuoi usare flash, assicurati di avere google-generativeai aggiornato.
+        self.model = genai.GenerativeModel('gemini-pro')
 
-    # Aggiungi il parametro 'zones' qui sotto
-    def get_feedback(self, data, zones):
-        if not self.model: return "⚠️ API Key mancante."
-        
-        # Formattiamo le zone in una stringa leggibile
-        zones_str = ", ".join([f"{z['Zone']}: {z['Percent']:.1f}%" for z in zones])
-        
-        prompt = f"""
-        Agisci come un coach di atletica élite. Analizza questa sessione (SCORE 4.0).
-        
-        DATI SESSIONE:
-        - Distanza: {data['Dist (km)']} km
-        - Meteo: {data['Meteo']}
-        - SCORE: {data['SCORE']} (Livello: {data['Rank']})
-        - Efficienza (Decoupling): {data['Decoupling']}% (Target <5%)
-        - Benchmark WR: {data['WR_Pct']}% del record del mondo
-        - DISTRIBUZIONE ZONE: {zones_str}
-        
-        RICHIESTA (Markdown, tono tecnico ma motivante):
-        1. 🧠 **Analisi Fisiologica**: Commenta il Disaccoppiamento e la distribuzione nelle Zone. L'atleta ha rispettato l'obiettivo della seduta?
-        2. 🔋 **Gestione**: Come ha influito il meteo o la strategia di passo (WR Pct)?
-        3. 🎯 **Next Step**: Un consiglio secco per il prossimo allenamento.
+    def get_feedback(self, run_data, zones):
         """
-        try:
-            return self.model.generate_content(prompt).text
-        except Exception as e:
-            return f"Errore AI: {e}"
-class WeatherService:
-    URL = "https://archive-api.open-meteo.com/v1/archive"
-    
-    @staticmethod
-    @st.cache_data(ttl=86400)
-    def get_weather(lat, lon, date_str, hour):
-        try:
-            p = {"latitude": lat, "longitude": lon, "start_date": date_str, "end_date": date_str, "hourly": "temperature_2m,relative_humidity_2m"}
-            res = requests.get(WeatherService.URL, params=p).json()
-            idx = min(hour, 23)
-            return res['hourly']['temperature_2m'][idx], res['hourly']['relative_humidity_2m'][idx]
-        except: return None, None
+        Genera un feedback testuale basato sui dati della corsa.
+        """
+        # Creiamo un prompt testuale pulito
+        prompt = f"""
+        Agisci come un allenatore di corsa d'élite (stile Jack Daniels o Joe Friel).
+        Analizza questa sessione di allenamento e dammi un feedback breve, diretto e motivante (max 100 parole).
+        Usa formattazione Markdown (grassetti, elenchi).
 
-class StravaService:
-    AUTH = "https://www.strava.com/oauth/authorize"
-    TOKEN = "https://www.strava.com/oauth/token"
-    API = "https://www.strava.com/api/v3"
-    
-    def __init__(self, cid, csec): self.cid, self.csec = cid, csec
-    
-    def get_link(self, redirect):
-        return f"{self.AUTH}?client_id={self.cid}&response_type=code&redirect_uri={redirect}&scope=activity:read_all"
-    
-    def get_token(self, code):
-        r = requests.post(self.TOKEN, data={"client_id": self.cid, "client_secret": self.csec, "code": code, "grant_type": "authorization_code"})
-        return r.json() if r.ok else None
-        
-    def fetch_activities(self, token, limit=5):
+        DATI ATLETA:
+        - Data: {run_data.get('Data')}
+        - Distanza: {run_data.get('Dist (km)')} km
+        - Tempo: {run_data.get('moving_time', 0) // 60} minuti
+        - Passo Medio: {self._format_pace(run_data.get('moving_time', 0), run_data.get('Dist (km)'))} min/km
+        - Potenza Media: {run_data.get('Power')} W
+        - FC Media: {run_data.get('HR')} bpm
+        - Disaccoppiamento Aerobico (Drift): {run_data.get('Decoupling')}% (Sopra il 5% indica fatica/inefficienza)
+        - SCORE (Indice qualità): {run_data.get('SCORE')}
+        - Livello: {run_data.get('Rank')}
+
+        DISTRIBUZIONE ZONE (Importante):
+        {json.dumps(zones, indent=2)}
+
+        ANALISI RICHIESTA:
+        1. Valuta se l'obiettivo (basato sulle zone) è stato centrato.
+        2. Commenta il disaccoppiamento (è alto?).
+        3. Dai un consiglio per la prossima volta.
+        """
+
         try:
-            acts = requests.get(f"{self.API}/athlete/activities", headers={'Authorization': f'Bearer {token}'}, params={'per_page': limit}).json()
-            data = []
-            for a in acts:
-                if a.get('type') == 'Run':
-                    s = requests.get(f"{self.API}/activities/{a['id']}/streams", headers={'Authorization': f'Bearer {token}'}, params={'keys': 'watts,heartrate,time', 'key_by_type': 'true'}).json()
-                    if 'watts' in s and 'heartrate' in s: data.append({'summary': a, 'streams': s})
-            return data
-        except: return []
+            response = self.model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            return f"⚠️ Errore del Coach AI: {str(e)}"
+
+    def _format_pace(self, seconds, km):
+        if km <= 0: return "0:00"
+        pace_sec = seconds / km
+        mins = int(pace_sec // 60)
+        secs = int(pace_sec % 60)
+        return f"{mins}:{secs:02d}"
+
+# Servizio Meteo (Lasciamolo qui o in un file separato, ma per ora è comodo qui)
+class WeatherService:
+    @staticmethod
+    def get_weather(lat, lon, date_str, hour):
+        # Mock / Placeholder - Per ora restituisce dati standard
+        # In futuro si può collegare a OpenMeteo API
+        return 20.0, 50.0 # Temp, Humidity
+
+# Servizio Strava (Scheletro per importazione)
+class StravaService:
+    def __init__(self, client_id, client_secret):
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.base_url = "https://www.strava.com/api/v3"
+    
+    def get_link(self, redirect_uri):
+        return f"https://www.strava.com/oauth/authorize?client_id={self.client_id}&response_type=code&redirect_uri={redirect_uri}&approval_prompt=force&scope=activity:read_all"
+
+    def get_token(self, code):
+        res = requests.post("https://www.strava.com/oauth/token", data={
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "code": code,
+            "grant_type": "authorization_code"
+        })
+        if res.status_code == 200:
+            return res.json()
+        return None
+
+    def fetch_activities(self, token, days_back=365):
+        """
+        Scarica le attività degli ultimi X giorni (default 365).
+        Gestisce la paginazione automatica.
+        """
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # 1. Calcoliamo la data di partenza (Unix Timestamp)
+        start_date = datetime.now() - timedelta(days=days_back)
+        epoch_time = int(start_date.timestamp())
+        
+        all_activities = []
+        page = 1
+        keep_fetching = True
+        
+        # 2. Loop per scaricare la LISTA (Paginazione)
+        while keep_fetching:
+            # Scarichiamo 50 attività alla volta per pagina
+            url = f"{self.base_url}/athlete/activities?after={epoch_time}&per_page=50&page={page}"
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                break
+                
+            data = response.json()
+            
+            if not data: # Se la lista è vuota, abbiamo finito
+                keep_fetching = False
+            else:
+                # Filtriamo solo le corse ('Run') subito per risparmiare tempo
+                runs = [x for x in data if x['type'] == 'Run']
+                all_activities.extend(runs)
+                page += 1
+                
+        # 3. Ora scarichiamo i DETTAGLI (Streams) per ogni corsa trovata
+        # Nota: Qui rischiamo il rate limit se ci sono >100 corse
+        results = []
+        
+        # Per evitare blocchi totali, restituiamo una lista di oggetti "pronti da scaricare"
+        # La fase di download pesante la faremo in app.py con la barra di progresso
+        return all_activities
+
+    def fetch_streams(self, token, activity_id):
+        """
+        Scarica i dati raw (Watt, HR) per una singola attività
+        """
+        headers = {"Authorization": f"Bearer {token}"}
+        s_url = f"{self.base_url}/activities/{activity_id}/streams?keys=watts,heartrate&key_by_type=true"
+        response = requests.get(s_url, headers=headers)
+        
+        if response.status_code == 200:
+            return response.json()
+        return None
