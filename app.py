@@ -54,12 +54,15 @@ with col_profile:
     if st.session_state.strava_token:
         athlete = st.session_state.strava_token.get("athlete", {})
         athlete_name = f"{athlete.get('firstname', 'Atleta')} {athlete.get('lastname', '')}"
+        
+        # Box Profilo Minimal
         st.markdown(f"""
         <div style="text-align: right; background: white; padding: 10px; border-radius: 15px; border: 1px solid #eee;">
             <small style="color: #888;">Benvenuto,</small><br>
             <strong>{athlete_name}</strong>
         </div>
         """, unsafe_allow_html=True)
+        
         if st.button("Logout", key="logout_btn", use_container_width=True):
             st.session_state.strava_token = None
             st.rerun()
@@ -67,6 +70,7 @@ with col_profile:
         st.link_button("🔗 Connetti Strava", auth_svc.get_link("https://scorerun.streamlit.app/"), type="primary", use_container_width=True)
 
 # --- 7. CONFIGURAZIONE ATLETA ---
+# Default parameters
 weight, hr_max, hr_rest, ftp = 70.0, 185, 50, 250
 
 if st.session_state.strava_token:
@@ -100,9 +104,9 @@ if not st.session_state.strava_token:
 # CASO B: UTENTE LOGGATO
 else:
     # Sezione Azioni (Download)
-    col_act_1, col_act_2 = st.columns([1.5, 3.5]) # Ho allargato un po' la colonna sinistra per il menu
+    col_act_1, col_act_2 = st.columns([1.5, 3.5])
     with col_act_1:
-        # 1. MENU A TENDINA (Nuovo!)
+        # 1. MENU A TENDINA TEMPORALE
         time_options = {
             "Ultimi 30 Giorni": 30,
             "Ultimi 90 Giorni": 90,
@@ -111,7 +115,6 @@ else:
             "Tutto lo Storico": 365*20
         }
         
-        # Selectbox che salva la scelta
         selected_label = st.selectbox(
             "Periodo da analizzare:", 
             options=list(time_options.keys()), 
@@ -120,14 +123,13 @@ else:
         
         days_to_fetch = time_options[selected_label]
 
-        # 2. PULSANTE DINAMICO
+        # 2. PULSANTE DOWNLOAD DINAMICO
         if st.button(f"🚀 Scarica {selected_label}", type="primary", use_container_width=True):
             
             eng = ScoreEngine()
             athlete_id = st.session_state.strava_token.get("athlete", {}).get("id", 0)
             token = st.session_state.strava_token["access_token"]
             
-            # Usiamo la variabile scelta dall'utente (days_to_fetch)
             with st.spinner(f"Recupero elenco attività ({selected_label})..."):
                 activities_list = auth_svc.fetch_activities(token, days_back=days_to_fetch)
             
@@ -136,42 +138,29 @@ else:
             else:
                 st.info(f"Trovate {len(activities_list)} corse. Inizio download dettagli...")
                 
-                # BARRA DI PROGRESSO
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 count_new = 0
-                
-                # Recuperiamo gli ID già salvati per non scaricarli due volte
                 existing_ids = [r['id'] for r in st.session_state.data]
                 
-                # Ciclo su ogni attività trovata
                 for i, s in enumerate(activities_list):
-                    # Aggiorniamo la barra
-                    progress = (i + 1) / len(activities_list)
-                    progress_bar.progress(progress)
-                    status_text.text(f"Analisi corsa {i+1}/{len(activities_list)}: {s['name']}")
+                    progress_bar.progress((i + 1) / len(activities_list))
+                    status_text.text(f"Analisi: {s['name']}")
                     
-                    # SE ESISTE GIÀ, SALTA!
+                    # Salta se esiste già
                     if s['id'] in existing_ids:
-                        # Se stiamo scaricando "Tutto lo storico", questa parte sarà velocissima
                         time.sleep(0.005) 
                         continue 
 
-                    # Scarichiamo gli STREAMS
                     streams = auth_svc.fetch_streams(token, s['id'])
                     
                     if streams and 'watts' in streams and 'heartrate' in streams:
                         dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
                         lat_lng = s.get('start_latlng', [])
-                        
-                        # Meteo
                         t, h = WeatherService.get_weather(lat_lng[0], lat_lng[1], dt.strftime("%Y-%m-%d"), dt.hour) if lat_lng else (20.0, 50.0)
                         if not t: t, h = 20.0, 50.0
 
-                        # Metrics
                         m = RunMetrics(s.get('average_watts', 0), s.get('average_heartrate', 0), s.get('distance', 0), s.get('moving_time', 0), s.get('total_elevation_gain', 0), weight, hr_max, hr_rest, t, h)
-                        
-                        # Calcoli
                         dec = eng.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
                         score, wcf, wr_p = eng.compute_score(m, dec)
                         rnk, _ = eng.get_rank(score)
@@ -188,25 +177,21 @@ else:
                         
                         if db_svc.save_run(run_obj, athlete_id):
                             count_new += 1
-                    
-                    # Pausa tattica
                     time.sleep(0.1)
                 
-                # Fine Processo
                 status_text.empty()
                 progress_bar.empty()
-                
-                # Ricarichiamo i dati aggiornati
                 st.session_state.data = db_svc.get_history()
                 
                 if count_new > 0: 
                     st.balloons()
-                    st.success(f"✅ Completato! Archiviate {count_new} nuove attività.")
+                    st.success(f"Archiviate {count_new} nuove attività.")
                     time.sleep(2)
                     st.rerun()
                 else: 
-                    st.info("Il database è già aggiornato.")
-   # --- DASHBOARD & LAB ---
+                    st.info("Database già aggiornato.")
+
+    # --- DASHBOARD & LAB ---
     if st.session_state.data:
         st.markdown("<br>", unsafe_allow_html=True)
         t1, t2 = st.tabs(["📊 Dashboard", "🔬 Laboratorio Analisi"])
@@ -233,23 +218,16 @@ else:
         # CALCOLO TREND (Per la freccia)
         diff = current_score - prev_score
         if diff > 0:
-            trend_arrow = "↗"
-            trend_color = "#4CAF50" # Verde
             trend_label = "In Crescita"
         elif diff < 0:
-            trend_arrow = "↘"
-            trend_color = "#FF5252" # Rosso
             trend_label = "In Calo"
         else:
-            trend_arrow = "→"
-            trend_color = "#999"
             trend_label = "Stabile"
 
         # --- TAB 1: BENTO DASHBOARD ---
         with t1:
             
             # 1. HERO SECTION: TRE CERCHI (Passato - Presente - Futuro)
-            # Layout: Colonna piccola, Colonna Grande, Colonna Piccola
             c_prev, c_main, c_next = st.columns([1, 1.5, 1], gap="small")
             
             # --- CERCHIO SINISTRA (Passato) ---
@@ -311,55 +289,53 @@ else:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # 2. KPI BOXES (Con Trend aggiunto)
-            # Usiamo 4 colonne ora
+            # 2. KPI BOXES (Perfettamente Allineati)
             k1, k2, k3, k4 = st.columns(4, gap="small")
             
-            # CSS per centrare testo metriche
-            st.markdown("""<style>div[data-testid="stMetric"] { text-align: center; align-items: center; justify-content: center; } div[data-testid="stMetricLabel"] { justify-content: center; }</style>""", unsafe_allow_html=True)
+            # CSS per centrare testo metriche e aggiungere bordo/ombra
+            st.markdown("""
+            <style>
+            div[data-testid="stMetric"] { 
+                text-align: center; 
+                align-items: center; 
+                justify-content: center; 
+                background-color: white; 
+                border-radius: 10px; 
+                padding: 10px; 
+                border: 1px solid #eee; 
+                box-shadow: 0 2px 5px rgba(0,0,0,0.02); 
+            } 
+            div[data-testid="stMetricLabel"] { 
+                justify-content: center; 
+            }
+            </style>
+            """, unsafe_allow_html=True)
             
             with k1: st.metric("Efficienza", f"{current_run['Decoupling']}%", "Drift")
             with k2: st.metric("Potenza", f"{current_run['Power']}w", f"{current_run['Meteo']}")
             with k3: st.metric("Benchmark", f"{current_run['WR_Pct']}%", "vs WR")
-            
-            # KPI TREND PERSONALIZZATO
-            with k4:
-                st.markdown(f"""
-                <div style="
-                    background-color: white; border: 1px solid #eee; border-radius: 10px; padding: 10px;
-                    display: flex; flex-direction: column; align-items: center; justify-content: center; height: 90px;
-                ">
-                    <span style="font-size: 0.8rem; color: #888;">Trend</span>
-                    <span style="font-size: 1.8rem; color: {trend_color}; font-weight: bold;">{trend_arrow}</span>
-                    <span style="font-size: 0.7rem; color: {trend_color}; font-weight: 600;">{trend_label}</span>
-                </div>
-                """, unsafe_allow_html=True)
+            with k4: st.metric("Trend", trend_label, f"{diff:+.2f}") # Delta colorato automatico
                 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # 3. LISTA RECENTI (Full Width ora che il grafico è sparito)
-            # Layout: Lista a sinistra (più grande) e Dettagli testuali a destra? 
-            # Oppure Lista centrata. Facciamo Lista Centrata per pulizia.
-            st.markdown("##### 🗃 Ultime Attività")
-            render_history_table(df)
+            # 3. LISTA RECENTI NASCOSTA
+            with st.expander("📂 Attività Analizzate", expanded=False):
+                render_history_table(df)
 
-        # --- TAB 2: LAB (Con Grafico Trend Spostato Qui) ---
+        # --- TAB 2: LAB (Con Grafico Trend) ---
         with t2:
             st.markdown("### 🔬 Laboratorio Analisi")
             
-            # 1. GRAFICO TREND (Spostato qui)
+            # 1. GRAFICO TREND
             if len(df) > 1:
                 render_trend_chart(df.head(30))
                 st.divider()
 
-            # 2. SELETTORE ATTIVITÀ E ANALISI
+            # 2. SELETTORE ATTIVITÀ
             opts = {r['id']: f"{r['Data'].strftime('%Y-%m-%d')} - {r['Dist (km)']}km" for i, r in df.iterrows()}
-            # Nota: iterrows su df ordinato per data, quindi la lista nel menu è ordinata
-            
             sel = st.selectbox("Seleziona Attività Specifica:", list(opts.keys()), format_func=lambda x: opts[x])
             
-            # Recuperiamo la run selezionata dal DataFrame (più veloce che loopare st.session_state)
-            run = df[df['id'] == sel].iloc[0].to_dict() # Convertiamo in dict per compatibilità con le funzioni esistenti
+            run = df[df['id'] == sel].iloc[0].to_dict()
             
             col_ai, col_charts = st.columns([1, 2], gap="medium")
             
@@ -383,7 +359,6 @@ else:
                                 feedback = coach.get_feedback(run, zones_calc)
                                 st.markdown(feedback)
                                 db_svc.update_ai_feedback(run['id'], feedback)
-                                # Non aggiorniamo df locale perché è una copia, ma al prossimo rerun si vedrà
                     else:
                         st.warning("⚠️ Manca API Key")
 
@@ -394,7 +369,3 @@ else:
                 render_scatter_chart(run['raw_watts'], run['raw_hr'])
                 st.markdown("<br>", unsafe_allow_html=True)
                 render_zones_chart(ScoreEngine.calculate_zones(run['raw_watts'], ftp))
-
-    else:
-        # Questo else ora è allineato correttamente con "if st.session_state.data"
-        st.info("👆 Connetti Strava per iniziare.")
