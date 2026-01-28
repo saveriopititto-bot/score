@@ -103,235 +103,189 @@ if not st.session_state.strava_token:
 
 # CASO B: UTENTE LOGGATO
 else:
-    # Sezione Azioni (Download)
-    col_act_1, col_act_2 = st.columns([1.5, 3.5])
-    with col_act_1:
-        # 1. MENU A TENDINA TEMPORALE
-        time_options = {
-            "Ultimi 30 Giorni": 30,
-            "Ultimi 90 Giorni": 90,
-            "Ultimi 12 Mesi": 365,
-            "Ultimi 5 Anni": 365*5,
-            "Tutto lo Storico": 365*20
-        }
+    # --- 1. TOOLBAR CENTRATA & COMPATTA ---
+    # Usiamo colonne cuscinetto [3, 2, 3] per centrare il contenuto in uno spazio stretto
+    space_L, col_controls, space_R = st.columns([3, 2, 3])
+    
+    with col_controls:
+        # Layout interno: Menu a Sx (2/3) e Bottone a Dx (1/3)
+        # vertical_alignment="bottom" allinea il bottone alla casella, ignorando l'altezza della label
+        c_drop, c_btn = st.columns([2, 1], gap="small", vertical_alignment="bottom")
         
-        selected_label = st.selectbox(
-            "Periodo da analizzare:", 
-            options=list(time_options.keys()), 
-            index=2 # Default: 12 Mesi
-        )
+        with c_drop:
+            time_options = {
+                "30 Giorni": 30,
+                "90 Giorni": 90,
+                "12 Mesi": 365,
+                "5 Anni": 365*5,
+                "Storico": 365*20
+            }
+            selected_label = st.selectbox(
+                "Periodo:", 
+                options=list(time_options.keys()), 
+                index=2, # Default 12 Mesi
+                label_visibility="visible"
+            )
+            days_to_fetch = time_options[selected_label]
+
+        with c_btn:
+            # Pulsante compatto che funge da Refresh/Download
+            start_sync = st.button("🔄 Sync", type="primary", use_container_width=True, help="Scarica o aggiorna dati")
+
+    # --- 2. LOGICA DI DOWNLOAD (Attivata dal pulsante) ---
+    if start_sync:
+        eng = ScoreEngine()
+        athlete_id = st.session_state.strava_token.get("athlete", {}).get("id", 0)
+        token = st.session_state.strava_token["access_token"]
         
-        days_to_fetch = time_options[selected_label]
+        with st.spinner(f"Sincronizzazione Strava ({selected_label})..."):
+            activities_list = auth_svc.fetch_activities(token, days_back=days_to_fetch)
+        
+        if not activities_list:
+            st.warning(f"Nessuna corsa trovata negli ultimi {days_to_fetch} giorni.")
+        else:
+            st.toast(f"Trovate {len(activities_list)} attività. Elaborazione...")
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            count_new = 0
+            existing_ids = [r['id'] for r in st.session_state.data]
+            
+            for i, s in enumerate(activities_list):
+                progress_bar.progress((i + 1) / len(activities_list))
+                status_text.caption(f"Elaborazione: {s['name']}")
+                
+                # Salta se esiste già (Velocissimo)
+                if s['id'] in existing_ids:
+                    time.sleep(0.005) 
+                    continue 
 
-        # 2. PULSANTE DOWNLOAD DINAMICO
-        if st.button(f"🚀 Scarica {selected_label}", type="primary", use_container_width=True):
-            
-            eng = ScoreEngine()
-            athlete_id = st.session_state.strava_token.get("athlete", {}).get("id", 0)
-            token = st.session_state.strava_token["access_token"]
-            
-            with st.spinner(f"Recupero elenco attività ({selected_label})..."):
-                activities_list = auth_svc.fetch_activities(token, days_back=days_to_fetch)
-            
-            if not activities_list:
-                st.warning(f"Nessuna corsa trovata negli {selected_label}.")
-            else:
-                st.info(f"Trovate {len(activities_list)} corse. Inizio download dettagli...")
+                # Scarica dettagli (Lento)
+                streams = auth_svc.fetch_streams(token, s['id'])
                 
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                count_new = 0
-                existing_ids = [r['id'] for r in st.session_state.data]
-                
-                for i, s in enumerate(activities_list):
-                    progress_bar.progress((i + 1) / len(activities_list))
-                    status_text.text(f"Analisi: {s['name']}")
+                if streams and 'watts' in streams and 'heartrate' in streams:
+                    dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
+                    lat_lng = s.get('start_latlng', [])
+                    t, h = WeatherService.get_weather(lat_lng[0], lat_lng[1], dt.strftime("%Y-%m-%d"), dt.hour) if lat_lng else (20.0, 50.0)
+                    if not t: t, h = 20.0, 50.0
+
+                    m = RunMetrics(s.get('average_watts', 0), s.get('average_heartrate', 0), s.get('distance', 0), s.get('moving_time', 0), s.get('total_elevation_gain', 0), weight, hr_max, hr_rest, t, h)
+                    dec = eng.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
+                    score, wcf, wr_p = eng.compute_score(m, dec)
+                    rnk, _ = eng.get_rank(score)
                     
-                    # Salta se esiste già
-                    if s['id'] in existing_ids:
-                        time.sleep(0.005) 
-                        continue 
-
-                    streams = auth_svc.fetch_streams(token, s['id'])
+                    run_obj = {
+                        "id": s['id'], "Data": dt.strftime("%Y-%m-%d"), 
+                        "Dist (km)": round(m.distance_meters/1000, 2),
+                        "Power": int(m.avg_power), "HR": int(m.avg_hr),
+                        "Decoupling": round(dec*100, 1), "WCF": round(wcf, 2),
+                        "SCORE": round(score, 2), "WR_Pct": round(wr_p, 1),
+                        "Rank": rnk, "Meteo": f"{t}°C",
+                        "raw_watts": streams['watts']['data'], "raw_hr": streams['heartrate']['data']
+                    }
                     
-                    if streams and 'watts' in streams and 'heartrate' in streams:
-                        dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
-                        lat_lng = s.get('start_latlng', [])
-                        t, h = WeatherService.get_weather(lat_lng[0], lat_lng[1], dt.strftime("%Y-%m-%d"), dt.hour) if lat_lng else (20.0, 50.0)
-                        if not t: t, h = 20.0, 50.0
+                    if db_svc.save_run(run_obj, athlete_id):
+                        count_new += 1
+                time.sleep(0.1) # Anti-ban
+            
+            status_text.empty()
+            progress_bar.empty()
+            st.session_state.data = db_svc.get_history()
+            
+            if count_new > 0: 
+                st.balloons()
+                st.success(f"Archiviate {count_new} nuove attività!")
+                time.sleep(1.5)
+                st.rerun()
+            else: 
+                st.info("Tutto aggiornato.")
 
-                        m = RunMetrics(s.get('average_watts', 0), s.get('average_heartrate', 0), s.get('distance', 0), s.get('moving_time', 0), s.get('total_elevation_gain', 0), weight, hr_max, hr_rest, t, h)
-                        dec = eng.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
-                        score, wcf, wr_p = eng.compute_score(m, dec)
-                        rnk, _ = eng.get_rank(score)
-                        
-                        run_obj = {
-                            "id": s['id'], "Data": dt.strftime("%Y-%m-%d"), 
-                            "Dist (km)": round(m.distance_meters/1000, 2),
-                            "Power": int(m.avg_power), "HR": int(m.avg_hr),
-                            "Decoupling": round(dec*100, 1), "WCF": round(wcf, 2),
-                            "SCORE": round(score, 2), "WR_Pct": round(wr_p, 1),
-                            "Rank": rnk, "Meteo": f"{t}°C",
-                            "raw_watts": streams['watts']['data'], "raw_hr": streams['heartrate']['data']
-                        }
-                        
-                        if db_svc.save_run(run_obj, athlete_id):
-                            count_new += 1
-                    time.sleep(0.1)
-                
-                status_text.empty()
-                progress_bar.empty()
-                st.session_state.data = db_svc.get_history()
-                
-                if count_new > 0: 
-                    st.balloons()
-                    st.success(f"Archiviate {count_new} nuove attività.")
-                    time.sleep(2)
-                    st.rerun()
-                else: 
-                    st.info("Database già aggiornato.")
-
-    # --- DASHBOARD & LAB ---
+    # --- 3. DASHBOARD & LAB ---
     if st.session_state.data:
         st.markdown("<br>", unsafe_allow_html=True)
         t1, t2 = st.tabs(["📊 Dashboard", "🔬 Laboratorio Analisi"])
         
-        # --- PREPARAZIONE DATI ---
+        # Preparazione Dati
         df = pd.DataFrame(st.session_state.data)
         df['Data'] = pd.to_datetime(df['Data'])
-        df = df.sort_values(by='Data', ascending=False) # Ordine: [Oggi, Ieri, L'altro ieri...]
+        df = df.sort_values(by='Data', ascending=False)
         
-        # Calcolo Valori per i 3 Cerchi
+        # Calcoli Dashboard
         current_run = df.iloc[0]
         current_score = current_run['SCORE']
         
-        # PASSATO (Previous)
         if len(df) > 1:
             prev_run = df.iloc[1]
             prev_score = prev_run['SCORE']
         else:
-            prev_score = current_score # Fallback se è la prima corsa
+            prev_score = current_score
             
-        # FUTURO (Expected / Form) - Media delle ultime 3 corse
         expected_score = round(df.head(3)['SCORE'].mean(), 2)
 
-        # CALCOLO TREND (Per la freccia)
         diff = current_score - prev_score
-        if diff > 0:
-            trend_label = "In Crescita"
-        elif diff < 0:
-            trend_label = "In Calo"
-        else:
-            trend_label = "Stabile"
+        if diff > 0: trend_label = "In Crescita"
+        elif diff < 0: trend_label = "In Calo"
+        else: trend_label = "Stabile"
 
-        # --- TAB 1: BENTO DASHBOARD ---
+        # TAB 1
         with t1:
-            
-            # 1. HERO SECTION: TRE CERCHI (Passato - Presente - Futuro)
+            # Hero Section
             c_prev, c_main, c_next = st.columns([1, 1.5, 1], gap="small")
             
-            # --- CERCHIO SINISTRA (Passato) ---
             with c_prev:
                 st.markdown(f"""
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; opacity: 0.7;">
                     <div style="font-size: 0.8rem; font-weight: bold; color: #888; margin-bottom: 5px;">PRECEDENTE</div>
-                    <div style="
-                        width: 100px; height: 100px; border-radius: 50%;
-                        border: 4px solid #ddd; background: white;
-                        display: flex; align-items: center; justify-content: center;
-                        font-size: 1.8rem; font-weight: 700; color: #888;
-                        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-                    ">
+                    <div style="width: 100px; height: 100px; border-radius: 50%; border: 4px solid #ddd; background: white; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: 700; color: #888; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
                         {prev_score}
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                </div>""", unsafe_allow_html=True)
 
-            # --- CERCHIO CENTRALE (Presente / Totale) ---
             with c_main:
-                raw_rank = current_run['Rank']
-                clean_rank = raw_rank.split('/')[0].strip()
-                
+                clean_rank = current_run['Rank'].split('/')[0].strip()
                 st.markdown(f"""
                 <div style="display: flex; justify-content: center;">
-                    <div style="
-                        width: 170px; height: 170px; border-radius: 50%;
-                        border: 6px solid #CDFAD5; background: white;
-                        display: flex; flex-direction: column; align-items: center; justify-content: center;
-                        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-                        z-index: 10; position: relative;
-                    ">
+                    <div style="width: 170px; height: 170px; border-radius: 50%; border: 6px solid #CDFAD5; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 10; position: relative;">
                         <span style="color: #999; font-size: 0.75rem; font-weight: 700; letter-spacing: 1px;">SCORE ATTUALE</span>
                         <span style="color: #4A4A4A; font-size: 3.2rem; font-weight: 800; line-height: 1;">{current_score}</span>
-                        <div style="background-color: #CDFAD5; color: #4A4A4A; padding: 3px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; margin-top: 5px;">
-                            {clean_rank}
-                        </div>
+                        <div style="background-color: #CDFAD5; color: #4A4A4A; padding: 3px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; margin-top: 5px;">{clean_rank}</div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                </div>""", unsafe_allow_html=True)
 
-            # --- CERCHIO DESTRA (Futuro / Atteso) ---
             with c_next:
                  st.markdown(f"""
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; opacity: 0.7;">
                     <div style="font-size: 0.8rem; font-weight: bold; color: #6C5DD3; margin-bottom: 5px;">ATTESO</div>
-                    <div style="
-                        width: 100px; height: 100px; border-radius: 50%;
-                        border: 4px dashed #6C5DD3; background: white;
-                        display: flex; align-items: center; justify-content: center;
-                        font-size: 1.8rem; font-weight: 700; color: #6C5DD3;
-                        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-                    ">
+                    <div style="width: 100px; height: 100px; border-radius: 50%; border: 4px dashed #6C5DD3; background: white; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: 700; color: #6C5DD3; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
                         {expected_score}
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                </div>""", unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # 2. KPI BOXES (Perfettamente Allineati)
+            # KPI Boxes
             k1, k2, k3, k4 = st.columns(4, gap="small")
-            
-            # CSS per centrare testo metriche e aggiungere bordo/ombra
-            st.markdown("""
-            <style>
-            div[data-testid="stMetric"] { 
-                text-align: center; 
-                align-items: center; 
-                justify-content: center; 
-                background-color: white; 
-                border-radius: 10px; 
-                padding: 10px; 
-                border: 1px solid #eee; 
-                box-shadow: 0 2px 5px rgba(0,0,0,0.02); 
-            } 
-            div[data-testid="stMetricLabel"] { 
-                justify-content: center; 
-            }
-            </style>
-            """, unsafe_allow_html=True)
+            st.markdown("""<style>div[data-testid="stMetric"] { text-align: center; align-items: center; justify-content: center; background-color: white; border-radius: 10px; padding: 10px; border: 1px solid #eee; box-shadow: 0 2px 5px rgba(0,0,0,0.02); } div[data-testid="stMetricLabel"] { justify-content: center; }</style>""", unsafe_allow_html=True)
             
             with k1: st.metric("Efficienza", f"{current_run['Decoupling']}%", "Drift")
             with k2: st.metric("Potenza", f"{current_run['Power']}w", f"{current_run['Meteo']}")
             with k3: st.metric("Benchmark", f"{current_run['WR_Pct']}%", "vs WR")
-            with k4: st.metric("Trend", trend_label, f"{diff:+.2f}") # Delta colorato automatico
+            with k4: st.metric("Trend", trend_label, f"{diff:+.2f}")
                 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # 3. LISTA RECENTI NASCOSTA
+            # Lista Nascosta
             with st.expander("📂 Attività Analizzate", expanded=False):
                 render_history_table(df)
 
-        # --- TAB 2: LAB (Con Grafico Trend) ---
+        # TAB 2
         with t2:
             st.markdown("### 🔬 Laboratorio Analisi")
             
-            # 1. GRAFICO TREND
             if len(df) > 1:
                 render_trend_chart(df.head(30))
                 st.divider()
 
-            # 2. SELETTORE ATTIVITÀ
             opts = {r['id']: f"{r['Data'].strftime('%Y-%m-%d')} - {r['Dist (km)']}km" for i, r in df.iterrows()}
             sel = st.selectbox("Seleziona Attività Specifica:", list(opts.keys()), format_func=lambda x: opts[x])
             
