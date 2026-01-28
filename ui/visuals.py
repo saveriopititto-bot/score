@@ -98,3 +98,35 @@ def render_history_table(df):
             "SCORE": st.column_config.NumberColumn("⭐️", format="%.2f"),
         }
     )
+def render_trend_chart(df):
+    """
+    Mostra l'andamento dello SCORE nel tempo con una linea smussata.
+    """
+    # Ordiniamo per data
+    df_sorted = df.sort_values(by="Data")
+    
+    # Grafico
+    chart = alt.Chart(df_sorted).mark_line(
+        interpolate='basis', # Linea curva morbida
+        color='#FF8080',     # Color Salmone
+        strokeWidth=3
+    ).encode(
+        x=alt.X('Data:T', axis=False), # Niente asse X per pulizia
+        y=alt.Y('SCORE:Q', scale=alt.Scale(domain=[df['SCORE'].min()-0.5, df['SCORE'].max()+0.5]), axis=False),
+        tooltip=['Data', 'SCORE', 'Dist (km)']
+    ).properties(
+        height=80, # Basso e largo (Sparkline style)
+        width='container'
+    )
+    
+    # Aggiungiamo un'area sfumata sotto
+    area = chart.mark_area(
+        interpolate='basis',
+        opacity=0.2,
+        color='#FF8080'
+    ).encode(
+        y2=alt.value(100) # Sfumatura verso il basso
+    )
+
+    st.markdown("##### 📈 Trend SCORE (Ultimi allenamenti)")
+    st.altair_chart((area + chart).interactive(), use_container_width=True)
