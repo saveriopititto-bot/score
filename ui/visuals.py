@@ -101,28 +101,28 @@ def render_history_table(df):
 
 def render_trend_chart(df):
     """
-    Mostra l'andamento dello SCORE nel tempo.
-    Versione BLINDATA: Usa mark_area(line=True) per evitare errori di Schema.
+    Mostra l'andamento dello SCORE.
+    Versione SANITIZZATA: Pulisce i dati e rinomina le colonne prima di disegnare.
     """
-    # 1. PULIZIA DATI AGGRESSIVA
-    # Creiamo una copia per non toccare i dati originali
-    source = df.copy()
-    
-    # Forziamo i tipi corretti (fondamentale per evitare SchemaError)
-    source['Data'] = pd.to_datetime(source['Data'])
-    source['SCORE'] = pd.to_numeric(source['SCORE'], errors='coerce')
-    source['Dist (km)'] = pd.to_numeric(source['Dist (km)'], errors='coerce')
-    
-    # Rimuoviamo eventuali righe con dati mancanti che rompono il grafico
-    source = source.dropna(subset=['SCORE', 'Data'])
-    
-    # Ordiniamo per data
-    source = source.sort_values(by="Data")
+    # 1. CREIAMO UN DATAFRAME PULITO (Solo quello che serve)
+    # Copiamo solo le colonne necessarie
+    chart_data = pd.DataFrame({
+        'date': pd.to_datetime(df['Data']),
+        'score': pd.to_numeric(df['SCORE'], errors='coerce'),
+        'dist': pd.to_numeric(df['Dist (km)'], errors='coerce')
+    })
 
-    # 2. COSTRUZIONE GRAFICO SEMPLIFICATA
-    # Invece di sommare Area + Linea (che crea conflitti), usiamo un'Area con bordo!
-    chart = alt.Chart(source).mark_area(
-        line={'color': '#FF8080', 'strokeWidth': 3}, # La linea sopra l'area
+    # 2. RIMUOVIAMO FUSO ORARIO E VALORI NULLI
+    # Altair odia i fusi orari misti. Questo li rimuove.
+    if chart_data['date'].dt.tz is not None:
+        chart_data['date'] = chart_data['date'].dt.tz_localize(None)
+    
+    chart_data = chart_data.dropna() # Via i buchi
+    chart_data = chart_data.sort_values('date')
+
+    # 3. DISEGNO (Usa i nuovi nomi semplici: date, score)
+    chart = alt.Chart(chart_data).mark_area(
+        line={'color': '#FF8080', 'strokeWidth': 3},
         color=alt.Gradient(
             gradient='linear',
             stops=[alt.GradientStop(color='#FF8080', offset=0),
@@ -131,20 +131,16 @@ def render_trend_chart(df):
         ),
         opacity=0.4
     ).encode(
-        x=alt.X('Data:T', axis=False), # T = Temporale
-        y=alt.Y('SCORE:Q', scale=alt.Scale(zero=False, padding=10), axis=False), # Q = Quantitativo
+        x=alt.X('date', axis=False), # Niente asse X
+        y=alt.Y('score', scale=alt.Scale(zero=False, padding=10), axis=False), # Scala dinamica
         tooltip=[
-            alt.Tooltip('Data', title='Data', format='%Y-%m-%d'),
-            alt.Tooltip('SCORE', title='SCORE'),
-            alt.Tooltip('Dist (km)', title='Distanza')
+            alt.Tooltip('date', title='Data', format='%Y-%m-%d'),
+            alt.Tooltip('score', title='SCORE'),
+            alt.Tooltip('dist', title='km')
         ]
     ).properties(
         height=80
-        # Rimuoviamo width='container' che spesso causa bug
     )
-
-    # Nota: Rimuoviamo .interactive() per questo grafico piccolo (sparkline)
-    # perché lo zoom su un grafico senza assi confonde solo l'utente e causa errori.
 
     st.markdown("##### 📈 Trend SCORE")
     st.altair_chart(chart, use_container_width=True)
