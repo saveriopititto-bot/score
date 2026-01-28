@@ -169,26 +169,24 @@ else:
         t1, t2 = st.tabs(["📊 Dashboard", "🔬 Laboratorio Analisi"])
         df = pd.DataFrame(st.session_state.data)
         
+        
         # --- TAB 1: BENTO DASHBOARD ---
         with t1:
             last = df.iloc[0]
             
-            # 1. HERO SECTION: SCORE CENTRALE
-            # Usiamo 3 colonne vuote per centrare quella di mezzo
+            # 1. HERO SECTION: SCORE CENTRALE (ANIMATO)
+            # Usiamo colonne cuscinetto per centrare
             empty_L, c_score, empty_R = st.columns([1, 2, 1])
             
             with c_score:
-                # PULIZIA DATI
                 raw_rank = last['Rank']
-                # Prende solo la prima parte (es. "Amatore") e rimuove spazi extra
                 clean_rank = raw_rank.split('/')[0].strip()
                 score_val = last['SCORE']
 
-                # COSTRUIAMO L'HTML IN UNA VARIABILE PULITA
-                # Nota: Uso f-string ma mantengo il codice allineato a sinistra per evitare errori di markdown
+                # HTML "Schiacciato" con ANIMAZIONI RIPRISTINATE
                 html_circle = f"""
-<div style="display: flex; justify-content: center; margin-bottom: 20px;">
-    <div style="width: 180px; height: 180px; border-radius: 50%; border: 6px solid #CDFAD5; background-color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+<div style="display: flex; justify-content: center; margin-bottom: 10px;">
+    <div style="width: 180px; height: 180px; border-radius: 50%; border: 6px solid #CDFAD5; background-color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(0,0,0,0.05); transition: transform 0.3s ease; cursor: default;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
         <span style="color: #999; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px;">SCORE</span>
         <span style="color: #4A4A4A; font-size: 3.5rem; font-weight: 800; line-height: 1;">{score_val}</span>
         <div style="background-color: #CDFAD5; color: #4A4A4A; padding: 4px 15px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; margin-top: 5px;">
@@ -197,14 +195,31 @@ else:
     </div>
 </div>
 """
-                # ORA LO STAMPIAMO
                 st.markdown(html_circle, unsafe_allow_html=True)
-            # 2. KPI SECONDARI (3 Colonne sotto)
-            k1, k2, k3 = st.columns(3, gap="medium")
+
+            # 2. KPI SECONDARI (Raggruppati al centro)
+            # Creiamo 5 colonne: [Spazio, KPI1, KPI2, KPI3, Spazio]
+            # I numeri [1.5, 1, 1, 1, 1.5] definiscono le proporzioni: i KPI sono stretti al centro
+            sp1, k1, k2, k3, sp2 = st.columns([1.5, 1, 1, 1, 1.5], gap="small")
             
-            with k1: st.metric("Efficienza", f"{last['Decoupling']}%", "Drift Rate")
+            # Usiamo CSS per forzare l'allineamento centrale del testo delle metriche
+            st.markdown("""
+            <style>
+            /* Questo centra il testo dentro le metriche solo per questa pagina */
+            div[data-testid="stMetric"] {
+                text-align: center;
+                align-items: center;
+                justify-content: center;
+            }
+            div[data-testid="stMetricLabel"] {
+                justify-content: center;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            with k1: st.metric("Efficienza", f"{last['Decoupling']}%", "Drift")
             with k2: st.metric("Potenza", f"{last['Power']}w", f"{last['Meteo']}")
-            with k3: st.metric("Benchmark", f"{last['WR_Pct']}%", "vs World Rec")
+            with k3: st.metric("Benchmark", f"{last['WR_Pct']}%", "vs WR")
                 
             st.markdown("<br>", unsafe_allow_html=True)
 
@@ -223,7 +238,7 @@ else:
                 for i, row in mini_df.iterrows():
                     score_color = "#FF8080" if row['SCORE'] >= 3 else "#FFCF96"
                     st.markdown(f"""
-                    <div style="background-color: white; padding: 15px; border-radius: 20px; margin-bottom: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); display: flex; justify-content: space-between; align-items: center; border: 1px solid white;">
+                    <div style="background-color: white; padding: 15px; border-radius: 20px; margin-bottom: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); display: flex; justify-content: space-between; align-items: center; border: 1px solid white; transition: transform 0.2s;" onmouseover="this.style.transform='translateX(5px)'" onmouseout="this.style.transform='translateX(0)'">
                         <div>
                             <div style="font-weight:bold; color:#4A4A4A; font-size:0.9rem;">{row['Data']}</div>
                             <div style="font-size:0.75rem; color:#999; margin-top:3px;">{row['Dist (km)']} km • {row['Power']} W</div>
@@ -231,7 +246,7 @@ else:
                         <div style="background-color: {score_color}; color: white; padding: 5px 12px; border-radius: 12px; font-weight: bold; font-size: 0.85rem;">{row['SCORE']}</div>
                     </div>
                     """, unsafe_allow_html=True)
-
+        
         # --- TAB 2: LAB ---
         with t2:
             opts = {r['id']: f"{r['Data']} - {r['Dist (km)']}km" for r in st.session_state.data}
