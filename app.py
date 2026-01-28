@@ -178,44 +178,27 @@ else:
             empty_L, c_score, empty_R = st.columns([1, 2, 1])
             
             with c_score:
-                # PULIZIA TESTO: Prendiamo solo la parte prima di "/" (es. "Amatore")
+                # PULIZIA DATI
                 raw_rank = last['Rank']
-                clean_rank = raw_rank.split('/')[0].strip() # <--- MODIFICA QUI
+                # Prende solo la prima parte (es. "Amatore") e rimuove spazi extra
+                clean_rank = raw_rank.split('/')[0].strip()
                 score_val = last['SCORE']
 
-                st.markdown(f"""
-                <div style="display: flex; justify-content: center; margin-bottom: 20px;">
-                    <div style="
-                        width: 180px; 
-                        height: 180px;
-                        border-radius: 50%;
-                        border: 6px solid #CDFAD5;
-                        background-color: white;
-                        display: flex; 
-                        flex-direction: column;
-                        align-items: center; 
-                        justify-content: center;
-                        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
-                    ">
-                        <span style="color: #999; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px;">SCORE</span>
-                        
-                        <span style="color: #4A4A4A; font-size: 3.5rem; font-weight: 800; line-height: 1;">{score_val}</span>
-                        
-                        <div style="
-                            background-color: #CDFAD5; 
-                            color: #4A4A4A; 
-                            padding: 4px 15px; 
-                            border-radius: 20px; 
-                            font-size: 0.8rem; 
-                            font-weight: 700;
-                            margin-top: 5px;
-                        ">
-                            {clean_rank}
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
+                # COSTRUIAMO L'HTML IN UNA VARIABILE PULITA
+                # Nota: Uso f-string ma mantengo il codice allineato a sinistra per evitare errori di markdown
+                html_circle = f"""
+<div style="display: flex; justify-content: center; margin-bottom: 20px;">
+    <div style="width: 180px; height: 180px; border-radius: 50%; border: 6px solid #CDFAD5; background-color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+        <span style="color: #999; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px;">SCORE</span>
+        <span style="color: #4A4A4A; font-size: 3.5rem; font-weight: 800; line-height: 1;">{score_val}</span>
+        <div style="background-color: #CDFAD5; color: #4A4A4A; padding: 4px 15px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; margin-top: 5px;">
+            {clean_rank}
+        </div>
+    </div>
+</div>
+"""
+                # ORA LO STAMPIAMO
+                st.markdown(html_circle, unsafe_allow_html=True)
             # 2. KPI SECONDARI (3 Colonne sotto)
             k1, k2, k3 = st.columns(3, gap="medium")
             
