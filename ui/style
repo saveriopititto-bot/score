@@ -1,0 +1,82 @@
+import streamlit as st
+
+def apply_custom_style():
+    # Palette
+    # FF8080 (Red/Salmon)
+    # FFCF96 (Orange/Peach)
+    # F6FDC3 (Yellow/Cream)
+    # CDFAD5 (Green/Mint)
+
+    st.markdown("""
+        <style>
+        /* IMPORT FONT QUESTRIAL */
+        @import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
+
+        html, body, [class*="css"] {
+            font-family: 'Questrial', sans-serif;
+            color: #4A4A4A;
+        }
+        
+        /* HEADER E TITOLI */
+        h1, h2, h3 {
+            color: #FF8080; /* Titoli color Salmone */
+            font-weight: 600;
+        }
+
+        /* METRIC CARDS (Box Dati) */
+        div[data-testid="stMetric"] {
+            background-color: #F8F9FA; /* Sfondo neutro chiaro */
+            border: 1px solid #EEEEEE;
+            padding: 15px;
+            border-radius: 15px;
+            border-top: 5px solid #CDFAD5; /* Accento Verde Menta */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        div[data-testid="stMetric"]:hover {
+            transform: translateY(-2px);
+            border-top-color: #FF8080;
+        }
+        
+        /* SIDEBAR */
+        section[data-testid="stSidebar"] {
+            background-color: #FAFAFA;
+            border-right: 1px solid #F0F0F0;
+        }
+        
+        /* BOTTONI */
+        .stButton>button {
+            border-radius: 25px;
+            background-color: #FF8080;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            font-family: 'Questrial', sans-serif;
+            box-shadow: 0 4px 10px rgba(255, 128, 128, 0.3);
+        }
+        .stButton>button:hover {
+            background-color: #FF6666;
+            color: white;
+        }
+
+        /* TABELLA DATI */
+        .stDataFrame {
+            border-radius: 10px;
+        }
+        
+        /* TABS */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 10px;
+        }
+        .stTabs [data-baseweb="tab"] {
+            background-color: #F6FDC3; /* Giallo pastello */
+            border-radius: 20px;
+            padding: 5px 20px;
+            border: none;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #FFCF96 !important; /* Arancio pastello */
+            color: #4A4A4A !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
