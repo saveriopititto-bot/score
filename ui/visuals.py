@@ -101,47 +101,50 @@ def render_history_table(df):
 
 def render_trend_chart(df):
     """
-    Mostra l'andamento dello SCORE nel tempo con una linea smussata.
-    Versione Fixata per SchemaValidationError.
+    Mostra l'andamento dello SCORE nel tempo.
+    Versione BLINDATA: Usa mark_area(line=True) per evitare errori di Schema.
     """
-    # 1. PREPARAZIONE DATI (Cruciale per evitare errori di schema)
+    # 1. PULIZIA DATI AGGRESSIVA
+    # Creiamo una copia per non toccare i dati originali
     source = df.copy()
-    # Ci assicuriamo che la data sia un oggetto datetime vero
+    
+    # Forziamo i tipi corretti (fondamentale per evitare SchemaError)
     source['Data'] = pd.to_datetime(source['Data'])
-    # Ordiniamo cronologicamente
+    source['SCORE'] = pd.to_numeric(source['SCORE'], errors='coerce')
+    source['Dist (km)'] = pd.to_numeric(source['Dist (km)'], errors='coerce')
+    
+    # Rimuoviamo eventuali righe con dati mancanti che rompono il grafico
+    source = source.dropna(subset=['SCORE', 'Data'])
+    
+    # Ordiniamo per data
     source = source.sort_values(by="Data")
 
-    # 2. DEFINIZIONE BASE (Comune a linea e area)
-    base = alt.Chart(source).encode(
-        x=alt.X('Data:T', axis=False) # T = Tempo
-    )
-
-    # 3. LIVELLO AREA (Sfondo sfumato)
-    area = base.mark_area(
-        interpolate='basis',
-        opacity=0.2,
-        color='#FF8080',
-        line=False
+    # 2. COSTRUZIONE GRAFICO SEMPLIFICATA
+    # Invece di sommare Area + Linea (che crea conflitti), usiamo un'Area con bordo!
+    chart = alt.Chart(source).mark_area(
+        line={'color': '#FF8080', 'strokeWidth': 3}, # La linea sopra l'area
+        color=alt.Gradient(
+            gradient='linear',
+            stops=[alt.GradientStop(color='#FF8080', offset=0),
+                   alt.GradientStop(color='white', offset=1)],
+            x1=1, x2=1, y1=1, y2=0
+        ),
+        opacity=0.4
     ).encode(
-        y=alt.Y('SCORE:Q', scale=alt.Scale(zero=False), axis=False) # Q = Quantitativo
+        x=alt.X('Data:T', axis=False), # T = Temporale
+        y=alt.Y('SCORE:Q', scale=alt.Scale(zero=False, padding=10), axis=False), # Q = Quantitativo
+        tooltip=[
+            alt.Tooltip('Data', title='Data', format='%Y-%m-%d'),
+            alt.Tooltip('SCORE', title='SCORE'),
+            alt.Tooltip('Dist (km)', title='Distanza')
+        ]
+    ).properties(
+        height=80
+        # Rimuoviamo width='container' che spesso causa bug
     )
 
-    # 4. LIVELLO LINEA (Tratto principale)
-    line = base.mark_line(
-        interpolate='basis',
-        color='#FF8080',
-        strokeWidth=3
-    ).encode(
-        y=alt.Y('SCORE:Q', scale=alt.Scale(zero=False), axis=False),
-        tooltip=['Data', 'SCORE', 'Dist (km)']
-    )
-
-    # 5. COMBINAZIONE E PROPRIETÀ FINALI
-    # Applichiamo le proprietà DOPO aver unito i grafici
-    chart = (area + line).properties(
-        height=80,
-        # width='container' dà problemi a volte, meglio lasciarlo gestire a streamlit
-    ).interactive()
+    # Nota: Rimuoviamo .interactive() per questo grafico piccolo (sparkline)
+    # perché lo zoom su un grafico senza assi confonde solo l'utente e causa errori.
 
     st.markdown("##### 📈 Trend SCORE")
     st.altair_chart(chart, use_container_width=True)
