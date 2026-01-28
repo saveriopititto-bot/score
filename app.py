@@ -99,41 +99,79 @@ if not st.session_state.strava_token:
 
 # CASO B: UTENTE LOGGATO
 else:
-    col_act_1, col_act_2 = st.columns([1, 4])
+    # Sezione Azioni (Download)
+    col_act_1, col_act_2 = st.columns([1.5, 3.5]) # Ho allargato un po' la colonna sinistra per il menu
     with col_act_1:
-        if st.button("🚀 Scarica Ultimi 12 Mesi", type="primary", use_container_width=True):
+        # 1. MENU A TENDINA (Nuovo!)
+        time_options = {
+            "Ultimi 30 Giorni": 30,
+            "Ultimi 90 Giorni": 90,
+            "Ultimi 12 Mesi": 365,
+            "Ultimi 5 Anni": 365*5,
+            "Tutto lo Storico": 365*20
+        }
+        
+        # Selectbox che salva la scelta
+        selected_label = st.selectbox(
+            "Periodo da analizzare:", 
+            options=list(time_options.keys()), 
+            index=2 # Default: 12 Mesi
+        )
+        
+        days_to_fetch = time_options[selected_label]
+
+        # 2. PULSANTE DINAMICO
+        if st.button(f"🚀 Scarica {selected_label}", type="primary", use_container_width=True):
+            
             eng = ScoreEngine()
             athlete_id = st.session_state.strava_token.get("athlete", {}).get("id", 0)
             token = st.session_state.strava_token["access_token"]
             
-            with st.spinner("Recupero elenco attività..."):
-                activities_list = auth_svc.fetch_activities(token, days_back=365)
+            # Usiamo la variabile scelta dall'utente (days_to_fetch)
+            with st.spinner(f"Recupero elenco attività ({selected_label})..."):
+                activities_list = auth_svc.fetch_activities(token, days_back=days_to_fetch)
             
             if not activities_list:
-                st.warning("Nessuna corsa trovata.")
+                st.warning(f"Nessuna corsa trovata negli {selected_label}.")
             else:
-                st.info(f"Trovate {len(activities_list)} corse. Analisi in corso...")
+                st.info(f"Trovate {len(activities_list)} corse. Inizio download dettagli...")
+                
+                # BARRA DI PROGRESSO
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 count_new = 0
+                
+                # Recuperiamo gli ID già salvati per non scaricarli due volte
                 existing_ids = [r['id'] for r in st.session_state.data]
                 
+                # Ciclo su ogni attività trovata
                 for i, s in enumerate(activities_list):
-                    progress_bar.progress((i + 1) / len(activities_list))
-                    status_text.text(f"Analisi: {s['name']}")
+                    # Aggiorniamo la barra
+                    progress = (i + 1) / len(activities_list)
+                    progress_bar.progress(progress)
+                    status_text.text(f"Analisi corsa {i+1}/{len(activities_list)}: {s['name']}")
                     
+                    # SE ESISTE GIÀ, SALTA!
                     if s['id'] in existing_ids:
+                        # Se stiamo scaricando "Tutto lo storico", questa parte sarà velocissima
+                        time.sleep(0.005) 
                         continue 
 
+                    # Scarichiamo gli STREAMS
                     streams = auth_svc.fetch_streams(token, s['id'])
                     
                     if streams and 'watts' in streams and 'heartrate' in streams:
                         dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
                         lat_lng = s.get('start_latlng', [])
+                        
+                        # Meteo
                         t, h = WeatherService.get_weather(lat_lng[0], lat_lng[1], dt.strftime("%Y-%m-%d"), dt.hour) if lat_lng else (20.0, 50.0)
                         if not t: t, h = 20.0, 50.0
 
+                        # Metrics
                         m = RunMetrics(s.get('average_watts', 0), s.get('average_heartrate', 0), s.get('distance', 0), s.get('moving_time', 0), s.get('total_elevation_gain', 0), weight, hr_max, hr_rest, t, h)
+                        
+                        # Calcoli
                         dec = eng.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
                         score, wcf, wr_p = eng.compute_score(m, dec)
                         rnk, _ = eng.get_rank(score)
@@ -150,20 +188,24 @@ else:
                         
                         if db_svc.save_run(run_obj, athlete_id):
                             count_new += 1
+                    
+                    # Pausa tattica
                     time.sleep(0.1)
                 
+                # Fine Processo
                 status_text.empty()
                 progress_bar.empty()
+                
+                # Ricarichiamo i dati aggiornati
                 st.session_state.data = db_svc.get_history()
                 
                 if count_new > 0: 
                     st.balloons()
-                    st.success(f"Archiviate {count_new} nuove attività.")
+                    st.success(f"✅ Completato! Archiviate {count_new} nuove attività.")
                     time.sleep(2)
                     st.rerun()
                 else: 
-                    st.info("Database già aggiornato.")
-
+                    st.info("Il database è già aggiornato.")
     # --- DASHBOARD & LAB ---
     if st.session_state.data:
         st.markdown("<br>", unsafe_allow_html=True)
