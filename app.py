@@ -2,13 +2,23 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# Import Moduli Locali
+# --- 1. IMPORTS LOCALI (Mettili tutti qui, l'ordine tra loro non conta) ---
 from engine.core import ScoreEngine, RunMetrics
 from services.api import StravaService, WeatherService, AICoachService
-from services.db import DatabaseService  # <--- NUOVO IMPORT
-from ui.visuals import render_benchmark_chart, render_zones_chart, render_scatter_chart
+from services.db import DatabaseService
+from ui.visuals import render_benchmark_chart, render_zones_chart, render_scatter_chart, render_history_table
+from ui.style import apply_custom_style  # <--- IMPORTALO QUI
 
-st.set_page_config(page_title="SCORE 4.0 Lab", page_icon="🧬", layout="wide")
+# --- 2. CONFIGURAZIONE PAGINA (Obbligatorio come primo comando st.) ---
+st.set_page_config(
+    page_title="SCORE 4.0 Lab",
+    page_icon="🧬",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# --- 3. APPLICA STILE (Subito dopo la config) ---
+apply_custom_style()
 
 # --- CONFIGURAZIONE SERVIZI ---
 # Carichiamo i secrets
