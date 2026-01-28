@@ -1,150 +1,119 @@
 import streamlit as st
 
 def apply_custom_style():
-    # Palette TUA:
-    # Primary (Salmon): #FF8080
-    # Secondary (Peach): #FFCF96
-    # Light (Cream): #F6FDC3
-    # Success (Mint): #CDFAD5
-    # Text: #4A4A4A
-
     st.markdown("""
         <style>
-        /* 1. IMPORT FONT QUESTRIAL */
         @import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
 
-        /* 2. SFONDO E FONT GLOBALI */
+        /* 1. SETUP GLOBALE */
         .stApp {
-            background-color: #F8F9FA; /* Grigio chiarissimo per far risaltare le card bianche */
+            background-color: #F8F9FA;
             font-family: 'Questrial', sans-serif;
             color: #4A4A4A;
         }
-
-        /* Nasconde header default */
         header {visibility: hidden;}
 
-        /* TITOLI */
-        h1, h2, h3 {
-            color: #4A4A4A;
-            font-weight: 600;
-        }
-
-        /* 3. BENTO CARDS (Box Fluttuanti) */
-        /* Questo trasforma le metriche in Card Pinterest */
-        div[data-testid="stMetric"] {
+        /* 2. SIDEBAR E INPUT (FIX CRITICO) */
+        section[data-testid="stSidebar"] {
             background-color: #FFFFFF;
-            border: none;
-            padding: 20px 25px;
-            border-radius: 25px; /* Molto arrotondato */
-            box-shadow: 0 10px 30px rgba(0,0,0,0.04); /* Ombra soffice */
-            height: 150px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
+            border-right: 1px solid #F0F0F0;
         }
         
-        /* Effetto Hover "Lift" */
-        div[data-testid="stMetric"]:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 35px rgba(0,0,0,0.08);
+        /* Questo trasforma gli input neri in box grigio chiaro eleganti */
+        div[data-baseweb="input"] {
+            background-color: #F3F4F6 !important; /* Grigio chiaro */
+            border-radius: 12px !important;
+            border: 1px solid #EEE !important;
+            color: #4A4A4A !important;
         }
-        
-        /* Decorazione colorata in alto alla card */
-        div[data-testid="stMetric"]::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 6px;
-            background: linear-gradient(90deg, #FF8080, #FFCF96); /* La tua sfumatura */
+        /* Colore del testo dentro gli input */
+        input[class*="st-"] {
+            color: #4A4A4A !important;
         }
-
-        /* Etichetta */
-        div[data-testid="stMetricLabel"] {
+        /* I bottoncini +/- degli input numerici */
+        button[kind="secondary"] {
+            background-color: transparent !important;
+            border: none !important;
+            color: #888 !important;
+        }
+        /* Etichette della sidebar */
+        .stMarkdown label p {
             font-size: 0.9rem;
             color: #888;
             font-weight: 600;
+        }
+
+        /* 3. METRIC CARDS (Bento Style) */
+        div[data-testid="stMetric"] {
+            background-color: #FFFFFF;
+            border: 1px solid #F0F0F0; /* Bordo sottile per definizione */
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+            height: 140px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            overflow: visible; /* Importante per l'hover */
+            transition: all 0.3s ease;
+        }
+        
+        div[data-testid="stMetric"]:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            border-color: #FF8080; /* Highlight colorato al passaggio */
+        }
+
+        div[data-testid="stMetricLabel"] {
+            font-size: 0.85rem;
+            color: #9CA3AF; /* Grigio medio */
+            font-weight: 600;
+            text-transform: uppercase;
             letter-spacing: 1px;
         }
 
-        /* Valore */
         div[data-testid="stMetricValue"] {
-            font-size: 2.5rem;
-            font-weight: 600;
-            color: #4A4A4A;
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: #1F2937; /* Quasi nero */
         }
 
-        /* Delta (Badge Mint) */
+        /* Badge colorati (Delta) */
         div[data-testid="stMetricDelta"] {
-            background-color: #CDFAD5; /* TUO VERDE MENTA */
-            color: #4A4A4A;
-            padding: 5px 12px;
-            border-radius: 15px;
+            background-color: #CDFAD5; /* Menta */
+            color: #1F2937;
+            padding: 4px 10px;
+            border-radius: 8px;
             font-weight: 600;
-            font-size: 0.85rem;
-            margin-top: 10px;
-            width: fit-content;
-        }
-        div[data-testid="stMetricDelta"] svg {
-            fill: #4A4A4A !important;
+            font-size: 0.8rem;
+            margin-top: 8px;
+            display: inline-block;
         }
 
-        /* 4. GRAFICI E TABELLE (Card Bianche) */
-        .stDataFrame, .stAltairChart, .element-container iframe {
+        /* 4. GRAFICI E TABELLE */
+        .stDataFrame, .stAltairChart {
             background-color: #FFFFFF;
+            border-radius: 20px;
             padding: 20px;
-            border-radius: 25px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            border: 1px solid #FFFFFF;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
         }
 
-        /* 5. SIDEBAR PULITA */
-        section[data-testid="stSidebar"] {
-            background-color: #FFFFFF;
-            box-shadow: 5px 0 20px rgba(0,0,0,0.02);
-            border: none;
+        /* 5. TITOLI */
+        h1, h2, h3 {
+            color: #1F2937;
+            font-weight: 700;
+            letter-spacing: -0.5px;
         }
-
-        /* 6. BOTTONI "PILLOLA" (Tuo Salmone) */
+        
+        /* 6. BOTTONI */
         .stButton>button {
             border-radius: 50px;
-            background-color: #FF8080; /* TUO SALMONE */
-            color: white;
-            border: none;
-            padding: 0.6rem 2rem;
-            font-family: 'Questrial', sans-serif;
             font-weight: 600;
-            box-shadow: 0 5px 15px rgba(255, 128, 128, 0.3);
-            transition: all 0.2s;
+            box-shadow: 0 4px 10px rgba(255, 128, 128, 0.3);
+            transition: transform 0.2s;
         }
         .stButton>button:hover {
-            background-color: #FF6666;
-            transform: scale(1.05);
-            box-shadow: 0 8px 20px rgba(255, 128, 128, 0.5);
-            color: white;
-        }
-
-        /* TABS FLUTTUANTI */
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 15px;
-            background-color: transparent;
-        }
-        .stTabs [data-baseweb="tab"] {
-            background-color: #FFFFFF;
-            border-radius: 50px;
-            padding: 8px 25px;
-            border: 1px solid #EFEFEF;
-            font-family: 'Questrial', sans-serif;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
-        }
-        .stTabs [aria-selected="true"] {
-            background-color: #F6FDC3 !important; /* TUO GIALLO CREMA */
-            border: 1px solid #F6FDC3 !important;
-            font-weight: 600;
+            transform: scale(1.03);
         }
         </style>
     """, unsafe_allow_html=True)
