@@ -98,35 +98,50 @@ def render_history_table(df):
             "SCORE": st.column_config.NumberColumn("⭐️", format="%.2f"),
         }
     )
+
 def render_trend_chart(df):
     """
     Mostra l'andamento dello SCORE nel tempo con una linea smussata.
+    Versione Fixata per SchemaValidationError.
     """
-    # Ordiniamo per data
-    df_sorted = df.sort_values(by="Data")
-    
-    # Grafico
-    chart = alt.Chart(df_sorted).mark_line(
-        interpolate='basis', # Linea curva morbida
-        color='#FF8080',     # Color Salmone
-        strokeWidth=3
-    ).encode(
-        x=alt.X('Data:T', axis=False), # Niente asse X per pulizia
-        y=alt.Y('SCORE:Q', scale=alt.Scale(domain=[df['SCORE'].min()-0.5, df['SCORE'].max()+0.5]), axis=False),
-        tooltip=['Data', 'SCORE', 'Dist (km)']
-    ).properties(
-        height=80, # Basso e largo (Sparkline style)
-        width='container'
-    )
-    
-    # Aggiungiamo un'area sfumata sotto
-    area = chart.mark_area(
-        interpolate='basis',
-        opacity=0.2,
-        color='#FF8080'
-    ).encode(
-        y2=alt.value(100) # Sfumatura verso il basso
+    # 1. PREPARAZIONE DATI (Cruciale per evitare errori di schema)
+    source = df.copy()
+    # Ci assicuriamo che la data sia un oggetto datetime vero
+    source['Data'] = pd.to_datetime(source['Data'])
+    # Ordiniamo cronologicamente
+    source = source.sort_values(by="Data")
+
+    # 2. DEFINIZIONE BASE (Comune a linea e area)
+    base = alt.Chart(source).encode(
+        x=alt.X('Data:T', axis=False) # T = Tempo
     )
 
-    st.markdown("##### 📈 Trend SCORE (Ultimi allenamenti)")
-    st.altair_chart((area + chart).interactive(), use_container_width=True)
+    # 3. LIVELLO AREA (Sfondo sfumato)
+    area = base.mark_area(
+        interpolate='basis',
+        opacity=0.2,
+        color='#FF8080',
+        line=False
+    ).encode(
+        y=alt.Y('SCORE:Q', scale=alt.Scale(zero=False), axis=False) # Q = Quantitativo
+    )
+
+    # 4. LIVELLO LINEA (Tratto principale)
+    line = base.mark_line(
+        interpolate='basis',
+        color='#FF8080',
+        strokeWidth=3
+    ).encode(
+        y=alt.Y('SCORE:Q', scale=alt.Scale(zero=False), axis=False),
+        tooltip=['Data', 'SCORE', 'Dist (km)']
+    )
+
+    # 5. COMBINAZIONE E PROPRIETÀ FINALI
+    # Applichiamo le proprietà DOPO aver unito i grafici
+    chart = (area + line).properties(
+        height=80,
+        # width='container' dà problemi a volte, meglio lasciarlo gestire a streamlit
+    ).interactive()
+
+    st.markdown("##### 📈 Trend SCORE")
+    st.altair_chart(chart, use_container_width=True)
