@@ -48,7 +48,7 @@ if "code" in st.query_params and not st.session_state.strava_token:
 col_header, col_profile = st.columns([3, 1], gap="large")
 
 with col_header:
-    st.title("🏃‍♂️ SCORE 4.0 Lab")
+    st.title("sCore")
 
 with col_profile:
     # SEZIONE LOGIN / PROFILO IN ALTO A DESTRA
