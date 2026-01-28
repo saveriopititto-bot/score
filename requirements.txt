@@ -3,5 +3,5 @@ pandas
 numpy
 requests
 altair
-google-generativeai
+google-generativeai>=0.7.0
 supabase
