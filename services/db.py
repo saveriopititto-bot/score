@@ -5,6 +5,15 @@ class DatabaseService:
     def __init__(self, url, key):
         self.supabase: Client = create_client(url, key)
 
+    def update_ai_feedback(self, run_id, feedback_text):
+        """Salva il commento dell'AI nel DB per non rigenerarlo."""
+        try:
+            self.client.table("runs").update({"ai_feedback": feedback_text}).eq("id", run_id).execute()
+            return True
+        except Exception as e:
+            print(f"Errore update AI: {e}")
+            return False
+
     def save_run(self, run_data, athlete_id):
         """Salva o aggiorna una corsa nel DB (Upsert)"""
         # Prepariamo il payload per Supabase
