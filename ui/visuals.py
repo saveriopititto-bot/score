@@ -4,23 +4,28 @@ import streamlit as st
 
 # Funzione Stile Clean + Questrial
 def clean_pastel_chart(chart):
-    return chart.configure_axis(
-        grid=False, 
+    return chart.configure(
+        background='#FFFFFF' # <--- FORZA SFONDO BIANCO
+    ).configure_axis(
+        grid=True, # Rimettiamo una griglia leggerissima per leggibilità
+        gridColor="#F3F4F6",
         domain=False,
-        labelColor='#999',
-        titleColor='#999',
+        labelColor='#9CA3AF',
+        titleColor='#9CA3AF',
         labelFont='Questrial',
         titleFont='Questrial'
     ).configure_view(
-        strokeWidth=0
+        strokeWidth=0,
+        fill='#FFFFFF' # <--- Assicurati che il riempimento sia bianco
     ).configure_title(
         font='Questrial',
         fontSize=16,
-        color='#4A4A4A',
+        color='#1F2937',
         anchor='start'
     ).configure_legend(
         labelFont='Questrial',
-        titleFont='Questrial'
+        titleFont='Questrial',
+        labelColor='#4A4A4A'
     )
 
 def render_benchmark_chart(df):
