@@ -4,3 +4,4 @@ numpy
 requests
 altair
 google-generativeai
+supabase
