@@ -117,59 +117,112 @@ if st.session_state.strava_token:
             else:
                 st.info("Nessuna nuova attività da salvare (già presenti nel DB).")
 
-# --- 9. VISUALIZZAZIONE (Funziona anche Offline) ---
+# --- 9. VISUALIZZAZIONE ---
 if st.session_state.data:
-    t1, t2 = st.tabs(["📊 Dashboard Storica", "🔬 Lab Analisi"])
+    # Creiamo spaziature verticali pulite
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    t1, t2 = st.tabs(["Dashboard", "Analysis Lab"])
     df = pd.DataFrame(st.session_state.data)
     
-    # TAB 1: OVERVIEW
+    # --- TAB 1: BENTO DASHBOARD ---
     with t1:
-        # KPI Rapidi Ultima Corsa
         last = df.iloc[0]
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Ultimo SCORE", f"{last['SCORE']}", delta=last['Rank'])
-        c2.metric("Decoupling", f"{last['Decoupling']}%", delta_color="inverse")
-        c3.metric("Meteo", last['Meteo'])
-        c4.metric("Potenza", f"{last['Power']} W")
         
-        st.divider()
-        st.caption(f"Archivio Cloud: {len(df)} attività.")
+        # RIGA 1: KPI CARDS (4 Colonne)
+        k1, k2, k3, k4 = st.columns(4, gap="medium")
         
-        # Nuova Tabella "Styled"
-        render_history_table(df)
+        with k1:
+            st.metric("SCORE Index", f"{last['SCORE']}", f"{last['Rank']}")
+        with k2:
+            st.metric("Efficienza", f"{last['Decoupling']}%", "Drift Rate") # Badge Mint
+        with k3:
+            st.metric("Potenza", f"{last['Power']}w", f"{last['Meteo']}")
+        with k4:
+            st.metric("Benchmark", f"{last['WR_Pct']}%", "vs World Rec")
+            
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # RIGA 2: GRIGLIA ASIMMETRICA (Grafico + Lista Recenti)
+        c_main, c_side = st.columns([2.2, 1], gap="medium")
         
-        st.divider()
-        render_benchmark_chart(df)
-        
-    # TAB 2: DEEP DIVE
+        with c_main:
+            # Card Bianca Grande (Grafico)
+            render_benchmark_chart(df)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("##### 🗃 Archivio Attività")
+            render_history_table(df)
+            
+        with c_side:
+            st.markdown("##### 📅 Recenti")
+            
+            # Creiamo una lista di "Mini Card" stile widget per le ultime 4 corse
+            mini_df = df.head(4)
+            for i, row in mini_df.iterrows():
+                # Colore SCORE dinamico (Salmon se alto, Peach se medio)
+                score_color = "#FF8080" if row['SCORE'] >= 3 else "#FFCF96"
+                
+                # HTML INJECTION PER STILE WIDGET
+                st.markdown(f"""
+                <div style="
+                    background-color: white;
+                    padding: 15px;
+                    border-radius: 20px;
+                    margin-bottom: 12px;
+                    box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    border: 1px solid white;
+                    transition: transform 0.2s;
+                " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                    <div>
+                        <div style="font-weight:bold; color:#4A4A4A; font-size:0.9rem;">{row['Data']}</div>
+                        <div style="font-size:0.75rem; color:#999; margin-top:3px;">
+                            {row['Dist (km)']} km • {row['Power']} W
+                        </div>
+                    </div>
+                    <div style="
+                        background-color: {score_color};
+                        color: white;
+                        padding: 5px 12px;
+                        border-radius: 12px;
+                        font-weight: bold;
+                        font-size: 0.85rem;
+                    ">
+                        {row['SCORE']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # --- TAB 2: LAB (Manteniamo struttura a colonne) ---
     with t2:
-        opts = {r['id']: f"{r['Data']} - {r['Dist (km)']}km ({r['Rank']})" for r in st.session_state.data}
-        sel = st.selectbox("Seleziona Attività:", list(opts.keys()), format_func=lambda x: opts[x])
+        # ... (Logica selezione corsa esistente) ...
+        # (Usa lo stesso codice di prima per il Tab 2, si adatterà automaticamente al CSS)
+        opts = {r['id']: f"{r['Data']} - {r['Dist (km)']}km" for r in st.session_state.data}
+        sel = st.selectbox("Seleziona Analisi:", list(opts.keys()), format_func=lambda x: opts[x])
         run = next(r for r in st.session_state.data if r['id'] == sel)
         
-        col_left, col_right = st.columns([1, 2])
+        col_ai, col_charts = st.columns([1, 2], gap="medium")
         
-        with col_left:
-            st.subheader("🤖 Coach AI")
+        with col_ai:
+            st.markdown("##### 🤖 AI Coach")
             if ai_key:
-                if st.button("Analizza Sessione", type="secondary"):
-                    with st.spinner("Il Coach sta studiando i dati..."):
+                if st.button("Genera Analisi", type="primary"):
+                    with st.spinner("Elaborazione..."):
                         coach = AICoachService(ai_key)
                         zones_calc = ScoreEngine.calculate_zones(run['raw_watts'], ftp)
-                        feedback = coach.get_feedback(run, zones_calc)
-                        st.markdown(feedback)
-            else:
-                st.warning("Inserisci Gemini API Key nella sidebar.")
+                        st.markdown(coach.get_feedback(run, zones_calc))
             
-            st.divider()
-            st.metric("Disaccoppiamento", f"{run['Decoupling']}%", help="Drift cardiaco (>5% indica affaticamento)")
-            st.metric("WR Benchmark", f"{run['WR_Pct']}%", help="% Velocità rispetto al Record del Mondo")
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.metric("Decoupling", f"{run['Decoupling']}%")
             
-        with col_right:
+        with col_charts:
             render_scatter_chart(run['raw_watts'], run['raw_hr'])
-            st.subheader(f"🚦 Zone Potenza (FTP: {ftp}W)")
+            st.markdown("<br>", unsafe_allow_html=True)
             render_zones_chart(ScoreEngine.calculate_zones(run['raw_watts'], ftp))
-
+            
 else:
     # Stato Iniziale Vuoto
     st.info("👋 Nessun dato in memoria. Connettiti a Strava dalla sidebar per iniziare.")
