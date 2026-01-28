@@ -177,35 +177,52 @@ else:
             k1, k2, k3, k4 = st.columns(4, gap="medium")
             
             with k1:
-                # Sostituiamo st.metric con HTML personalizzato per il Cerchio
+                # Recuperiamo i valori
+                score_val = last['SCORE']
+                rank_txt = last['Rank']
+                
+                # Se il testo del Rank è troppo lungo, lo accorciamo o riduciamo il font
+                # HTML/CSS puro per il cerchio
                 st.markdown(f"""
-                <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
+                <div style="display: flex; justify-content: center; align-items: center; padding: 10px 0;">
                     <div style="
-                        width: 150px; height: 150px;
+                        width: 160px; 
+                        height: 160px;
                         background-color: white;
                         border-radius: 50%;
-                        border: 6px solid #CDFAD5; /* TUO VERDE MENTA */
-                        box-shadow: 0 6px 15px rgba(0,0,0,0.05);
-                        display: flex; flex-direction: column;
-                        justify-content: center; align-items: center;
-                        transition: transform 0.3s;
-                    " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        border: 6px solid #CDFAD5;
+                        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+                        display: flex; 
+                        flex-direction: column;
+                        justify-content: center; 
+                        align-items: center;
+                        text-align: center;
+                    ">
                         
-                        <div style="color: #999; font-size: 0.85rem; font-weight: 600; text-transform: uppercase;">SCORE</div>
+                        <div style="color: #999; font-size: 0.8rem; font-weight: 600; letter-spacing: 1px; margin-bottom: 0px;">
+                            SCORE
+                        </div>
                         
-                        <div style="color: #4A4A4A; font-size: 2.8rem; font-weight: 700; line-height: 1; margin: 5px 0;">
-                            {last['SCORE']}
+                        <div style="color: #4A4A4A; font-size: 3rem; font-weight: 800; line-height: 1.1;">
+                            {score_val}
                         </div>
                         
                         <div style="
+                            margin-top: 5px;
                             background-color: #CDFAD5;
                             color: #4A4A4A; 
-                            padding: 3px 10px; 
-                            border-radius: 15px; 
-                            font-size: 0.75rem; 
-                            font-weight: 700;">
-                            {last['Rank']}
+                            padding: 4px 12px; 
+                            border-radius: 20px; 
+                            font-size: 0.7rem; 
+                            font-weight: 700;
+                            white-space: nowrap;
+                            max-width: 130px;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                        ">
+                            {rank_txt}
                         </div>
+                        
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
