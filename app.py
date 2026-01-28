@@ -173,67 +173,59 @@ else:
         with t1:
             last = df.iloc[0]
             
-            # KPI Cards
-            k1, k2, k3, k4 = st.columns(4, gap="medium")
+            # 1. HERO SECTION: SCORE CENTRALE
+            # Usiamo 3 colonne vuote per centrare quella di mezzo
+            empty_L, c_score, empty_R = st.columns([1, 2, 1])
             
-            with k1:
-                # Recuperiamo i valori
+            with c_score:
+                # PULIZIA TESTO: Prendiamo solo la parte prima di "/" (es. "Amatore")
+                raw_rank = last['Rank']
+                clean_rank = raw_rank.split('/')[0].strip() # <--- MODIFICA QUI
                 score_val = last['SCORE']
-                rank_txt = last['Rank']
-                
-                # Se il testo del Rank è troppo lungo, lo accorciamo o riduciamo il font
-                # HTML/CSS puro per il cerchio
+
                 st.markdown(f"""
-                <div style="display: flex; justify-content: center; align-items: center; padding: 10px 0;">
+                <div style="display: flex; justify-content: center; margin-bottom: 20px;">
                     <div style="
-                        width: 160px; 
-                        height: 160px;
-                        background-color: white;
+                        width: 180px; 
+                        height: 180px;
                         border-radius: 50%;
                         border: 6px solid #CDFAD5;
-                        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+                        background-color: white;
                         display: flex; 
                         flex-direction: column;
-                        justify-content: center; 
-                        align-items: center;
-                        text-align: center;
+                        align-items: center; 
+                        justify-content: center;
+                        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
                     ">
+                        <span style="color: #999; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px;">SCORE</span>
                         
-                        <div style="color: #999; font-size: 0.8rem; font-weight: 600; letter-spacing: 1px; margin-bottom: 0px;">
-                            SCORE
-                        </div>
-                        
-                        <div style="color: #4A4A4A; font-size: 3rem; font-weight: 800; line-height: 1.1;">
-                            {score_val}
-                        </div>
+                        <span style="color: #4A4A4A; font-size: 3.5rem; font-weight: 800; line-height: 1;">{score_val}</span>
                         
                         <div style="
-                            margin-top: 5px;
-                            background-color: #CDFAD5;
+                            background-color: #CDFAD5; 
                             color: #4A4A4A; 
-                            padding: 4px 12px; 
+                            padding: 4px 15px; 
                             border-radius: 20px; 
-                            font-size: 0.7rem; 
+                            font-size: 0.8rem; 
                             font-weight: 700;
-                            white-space: nowrap;
-                            max-width: 130px;
-                            overflow: hidden;
-                            text-overflow: ellipsis;
+                            margin-top: 5px;
                         ">
-                            {rank_txt}
+                            {clean_rank}
                         </div>
-                        
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
 
-            with k2: st.metric("Efficienza", f"{last['Decoupling']}%", "Drift Rate")
-            with k3: st.metric("Potenza", f"{last['Power']}w", f"{last['Meteo']}")
-            with k4: st.metric("Benchmark", f"{last['WR_Pct']}%", "vs World Rec")
+            # 2. KPI SECONDARI (3 Colonne sotto)
+            k1, k2, k3 = st.columns(3, gap="medium")
+            
+            with k1: st.metric("Efficienza", f"{last['Decoupling']}%", "Drift Rate")
+            with k2: st.metric("Potenza", f"{last['Power']}w", f"{last['Meteo']}")
+            with k3: st.metric("Benchmark", f"{last['WR_Pct']}%", "vs World Rec")
                 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Griglia Grafico + Lista
+            # 3. GRIGLIA GRAFICO + LISTA
             c_main, c_side = st.columns([2.2, 1], gap="medium")
             
             with c_main:
