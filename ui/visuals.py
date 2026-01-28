@@ -100,47 +100,13 @@ def render_history_table(df):
     )
 
 def render_trend_chart(df):
-    """
-    Mostra l'andamento dello SCORE.
-    Versione SANITIZZATA: Pulisce i dati e rinomina le colonne prima di disegnare.
-    """
-    # 1. CREIAMO UN DATAFRAME PULITO (Solo quello che serve)
-    # Copiamo solo le colonne necessarie
-    chart_data = pd.DataFrame({
-        'date': pd.to_datetime(df['Data']),
-        'score': pd.to_numeric(df['SCORE'], errors='coerce'),
-        'dist': pd.to_numeric(df['Dist (km)'], errors='coerce')
-    })
-
-    # 2. RIMUOVIAMO FUSO ORARIO E VALORI NULLI
-    # Altair odia i fusi orari misti. Questo li rimuove.
-    if chart_data['date'].dt.tz is not None:
-        chart_data['date'] = chart_data['date'].dt.tz_localize(None)
-    
-    chart_data = chart_data.dropna() # Via i buchi
-    chart_data = chart_data.sort_values('date')
-
-    # 3. DISEGNO (Usa i nuovi nomi semplici: date, score)
-    chart = alt.Chart(chart_data).mark_area(
-        line={'color': '#FF8080', 'strokeWidth': 3},
-        color=alt.Gradient(
-            gradient='linear',
-            stops=[alt.GradientStop(color='#FF8080', offset=0),
-                   alt.GradientStop(color='white', offset=1)],
-            x1=1, x2=1, y1=1, y2=0
-        ),
-        opacity=0.4
-    ).encode(
-        x=alt.X('date', axis=False), # Niente asse X
-        y=alt.Y('score', scale=alt.Scale(zero=False, padding=10), axis=False), # Scala dinamica
-        tooltip=[
-            alt.Tooltip('date', title='Data', format='%Y-%m-%d'),
-            alt.Tooltip('score', title='SCORE'),
-            alt.Tooltip('dist', title='km')
-        ]
-    ).properties(
-        height=80
-    )
-
+    # PIANO B: Grafico Nativo Streamlit (Impossibile che fallisca)
     st.markdown("##### 📈 Trend SCORE")
-    st.altair_chart(chart, use_container_width=True)
+    
+    # Prepariamo i dati
+    chart_data = df[['Data', 'SCORE']].copy()
+    chart_data['Data'] = pd.to_datetime(chart_data['Data'])
+    chart_data = chart_data.set_index('Data').sort_index()
+    
+    # Disegniamo usando il comando nativo
+    st.area_chart(chart_data['SCORE'], color="#FF8080", height=100)
