@@ -175,7 +175,41 @@ else:
             
             # KPI Cards
             k1, k2, k3, k4 = st.columns(4, gap="medium")
-            with k1: st.metric("SCORE Index", f"{last['SCORE']}", f"{last['Rank']}")
+            
+            with k1:
+                # Sostituiamo st.metric con HTML personalizzato per il Cerchio
+                st.markdown(f"""
+                <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
+                    <div style="
+                        width: 150px; height: 150px;
+                        background-color: white;
+                        border-radius: 50%;
+                        border: 6px solid #CDFAD5; /* TUO VERDE MENTA */
+                        box-shadow: 0 6px 15px rgba(0,0,0,0.05);
+                        display: flex; flex-direction: column;
+                        justify-content: center; align-items: center;
+                        transition: transform 0.3s;
+                    " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        
+                        <div style="color: #999; font-size: 0.85rem; font-weight: 600; text-transform: uppercase;">SCORE</div>
+                        
+                        <div style="color: #4A4A4A; font-size: 2.8rem; font-weight: 700; line-height: 1; margin: 5px 0;">
+                            {last['SCORE']}
+                        </div>
+                        
+                        <div style="
+                            background-color: #CDFAD5;
+                            color: #4A4A4A; 
+                            padding: 3px 10px; 
+                            border-radius: 15px; 
+                            font-size: 0.75rem; 
+                            font-weight: 700;">
+                            {last['Rank']}
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
             with k2: st.metric("Efficienza", f"{last['Decoupling']}%", "Drift Rate")
             with k3: st.metric("Potenza", f"{last['Power']}w", f"{last['Meteo']}")
             with k4: st.metric("Benchmark", f"{last['WR_Pct']}%", "vs World Rec")
