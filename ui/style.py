@@ -3,117 +3,155 @@ import streamlit as st
 def apply_custom_style():
     st.markdown("""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
+        /* 1. IMPORT FONT (Montserrat per titoli, Inter per testo) */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Montserrat:wght@700;800&display=swap');
 
-        /* 1. SETUP GLOBALE */
-        .stApp {
-            background-color: #F8F9FA;
-            font-family: 'Questrial', sans-serif;
-            color: #4A4A4A;
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
         }
-        header {visibility: hidden;}
 
-        /* 2. SIDEBAR E INPUT (FIX CRITICO) */
-        section[data-testid="stSidebar"] {
-            background-color: #FFFFFF;
-            border-right: 1px solid #F0F0F0;
+        h1, h2, h3 {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 800;
+            color: #2D3436;
+            letter-spacing: -0.5px;
         }
+
+        /* 2. PULIZIA STREAMLIT */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;} /* Nasconde la barra colorata in alto */
         
-        /* Questo trasforma gli input neri in box grigio chiaro eleganti */
-        div[data-baseweb="input"] {
-            background-color: #F3F4F6 !important; /* Grigio chiaro */
-            border-radius: 12px !important;
-            border: 1px solid #EEE !important;
-            color: #4A4A4A !important;
-        }
-        /* Colore del testo dentro gli input */
-        input[class*="st-"] {
-            color: #4A4A4A !important;
-        }
-        /* I bottoncini +/- degli input numerici */
-        button[kind="secondary"] {
-            background-color: transparent !important;
-            border: none !important;
-            color: #888 !important;
-        }
-        /* Etichette della sidebar */
-        .stMarkdown label p {
-            font-size: 0.9rem;
-            color: #888;
-            font-weight: 600;
+        /* Spaziatura superiore ridotta */
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 5rem;
         }
 
-        /* 3. METRIC CARDS (Bento Style) */
+        /* 3. STILE KPI CARDS (st.metric) */
         div[data-testid="stMetric"] {
             background-color: #FFFFFF;
-            border: 1px solid #F0F0F0; /* Bordo sottile per definizione */
-            padding: 20px;
-            border-radius: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-            height: 140px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            overflow: visible; /* Importante per l'hover */
+            border: 1px solid #F0F0F3;
+            border-radius: 16px;
+            padding: 15px 10px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
             transition: all 0.3s ease;
         }
-        
+
         div[data-testid="stMetric"]:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
-            border-color: #FF8080; /* Highlight colorato al passaggio */
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+            border-color: #6C5DD3;
         }
 
         div[data-testid="stMetricLabel"] {
-            font-size: 0.85rem;
-            color: #9CA3AF; /* Grigio medio */
+            font-size: 0.8rem !important;
+            color: #636E72 !important;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
         }
 
         div[data-testid="stMetricValue"] {
-            font-size: 2.2rem;
+            font-size: 1.6rem !important;
+            color: #2D3436 !important;
             font-weight: 700;
-            color: #1F2937; /* Quasi nero */
         }
 
-        /* Badge colorati (Delta) */
-        div[data-testid="stMetricDelta"] {
-            background-color: #CDFAD5; /* Menta */
-            color: #1F2937;
-            padding: 4px 10px;
-            border-radius: 8px;
+        /* 4. BOTTONI */
+        div.stButton > button {
+            border-radius: 12px;
             font-weight: 600;
-            font-size: 0.8rem;
-            margin-top: 8px;
-            display: inline-block;
-        }
-
-        /* 4. GRAFICI E TABELLE */
-        .stDataFrame, .stAltairChart {
-            background-color: #FFFFFF;
-            border-radius: 20px;
-            padding: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-        }
-
-        /* 5. TITOLI */
-        h1, h2, h3 {
-            color: #1F2937;
-            font-weight: 700;
-            letter-spacing: -0.5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+            border: none;
+            transition: all 0.2s;
         }
         
-        /* 6. BOTTONI */
-        .stButton>button {
-            border-radius: 50px;
-            font-weight: 600;
-            box-shadow: 0 4px 10px rgba(255, 128, 128, 0.3);
-            transition: transform 0.2s;
+        /* 5. TABS */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 20px;
+            background-color: transparent;
         }
-        .stButton>button:hover {
-            transform: scale(1.03);
+
+        .stTabs [data-baseweb="tab"] {
+            height: 50px;
+            white-space: pre-wrap;
+            border-radius: 10px;
+            color: #636E72;
+            font-weight: 600;
+        }
+
+        .stTabs [aria-selected="true"] {
+            background-color: #E3F2FD; /* Colore sfondo tab attiva */
+            color: #6C5DD3 !important; /* Colore testo tab attiva */
+            border-bottom: none;
+        }
+        
+        /* 6. EXPANDER */
+        .streamlit-expanderHeader {
+            background-color: #FFFFFF;
+            border-radius: 10px;
+            font-weight: 600;
+            color: #2D3436;
+        }
+
+        /* 7. SCORE CIRCLE ANIMATION */
+        @property --angle {
+            syntax: '<angle>';
+            initial-value: 0deg;
+            inherits: false;
+        }
+
+        .score-container {
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .score-circle {
+            position: relative;
+            width: 170px;
+            height: 170px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            /* Base border */
+            border: 6px solid #F0F0F3;
+            cursor: pointer;
+        }
+
+        /* The animated ring */
+        .score-circle::after {
+            content: '';
+            position: absolute;
+            top: -6px; left: -6px; right: -6px; bottom: -6px;
+            border-radius: 50%;
+            background: conic-gradient(#6C5DD3 var(--angle), transparent 0deg);
+            z-index: -1; /* Behind the white circle? No, we need a mask */
+            /* Let's try a border image approach or mask */
+            display: none;
+        }
+        
+        /* Better approach for ring overlay */
+        .score-circle:hover {
+            border-color: transparent;
+            background: 
+                linear-gradient(white, white) padding-box,
+                conic-gradient(#00E676 var(--angle), #F0F0F3 0deg) border-box; /* Green loading */
+            animation: rotateScore 1s ease-out forwards;
+        }
+
+        @keyframes rotateScore {
+            to {
+                --angle: 360deg;
+            }
         }
         </style>
     """, unsafe_allow_html=True)

@@ -242,10 +242,10 @@ else:
             with c_main:
                  st.markdown(f"""
                 <div style="display: flex; justify-content: center;">
-                    <div style="width: 170px; height: 170px; border-radius: 50%; border: 6px solid #CDFAD5; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
-                        <span style="color: #999; font-size: 0.7rem; font-weight: 700;">SCORE OGGI</span>
-                        <span style="color: #4A4A4A; font-size: 3.2rem; font-weight: 800; line-height: 1;">{cur_score}</span>
-                        <div style="background:#CDFAD5; color:#4A4A4A; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; margin-top:5px;">{cur_run['Rank'].split('/')[0]}</div>
+                    <div class="score-circle">
+                         <span style="color: #999; font-size: 0.7rem; font-weight: 700;">SCORE OGGI</span>
+                         <span style="color: #2D3436; font-size: 3.2rem; font-weight: 800; line-height: 1;">{cur_score}</span>
+                         <div style="background:#CDFAD5; color:#2D3436; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; margin-top:5px;">{cur_run['Rank'].split('/')[0]}</div>
                     </div>
                 </div>""", unsafe_allow_html=True)
             with c_next: # Percentile invece dell'atteso
@@ -300,12 +300,12 @@ else:
             
             c_ai, c_ch = st.columns([1, 2])
             with c_ai:
-                st.markdown("##### 🤖 Coach AI")
+                st.markdown("##### � Analisi Corsa")
                 if run.get('ai_feedback'):
                     st.success("Analisi salvata"); st.write(run.get('ai_feedback'))
                 else:
                     if st.button("✨ Genera Analisi"):
-                        coach = AICoachService(gemini_conf.get("api_key"))
+                        coach = AICoachService(gemini_key)
                         res = coach.get_feedback(run, ScoreEngine().calculate_zones(run['raw_watts'], ftp))
                         st.write(res); db_svc.update_ai_feedback(run['id'], res)
             with c_ch:

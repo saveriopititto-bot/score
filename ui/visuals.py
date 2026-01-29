@@ -15,7 +15,15 @@ def render_benchmark_chart(df):
         x=alt.X('SCORE:Q', bin=alt.Bin(maxbins=10), title='Score'),
         y=alt.Y('count()', title='Freq')
     )
-    chart = base.mark_bar(color='#CDFAD5', cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
+    chart = base.mark_bar(color='#6C5DD3', cornerRadiusTopLeft=5, cornerRadiusTopRight=5).properties(
+        height=200
+    ).configure_axis(
+        grid=False,
+        domain=False,
+        labelColor='#B2BEC3',
+        titleColor='#636E72'
+    ).configure_view(strokeWidth=0)
+    
     st.altair_chart(chart, use_container_width=True)
 
 def render_zones_chart(zones):
@@ -32,12 +40,20 @@ def render_zones_chart(zones):
     # Colori per le zone: Z1 (Grigio) -> Z5 (Rosso)
     colors = ['#E0E0E0', '#90CAF9', '#A5D6A7', '#FFCC80', '#EF9A9A']
     
-    chart = alt.Chart(df_zones).mark_bar().encode(
-        x=alt.X('Zona', sort=None),
-        y=alt.Y('Percentuale'),
+    chart = alt.Chart(df_zones).mark_bar(cornerRadiusEnd=5).encode(
+        x=alt.X('Zona', sort=None, axis=alt.Axis(labelAngle=0)),
+        y=alt.Y('Percentuale', title=None),
         color=alt.Color('Zona', scale=alt.Scale(range=colors), legend=None),
         tooltip=['Zona', 'Percentuale']
-    )
+    ).properties(
+        height=200
+    ).configure_axis(
+        grid=False,
+        domain=False,
+        labelColor='#B2BEC3',
+        titleColor='#636E72'
+    ).configure_view(strokeWidth=0)
+
     st.altair_chart(chart, use_container_width=True)
 
 def render_scatter_chart(watts, hr):
@@ -57,7 +73,14 @@ def render_scatter_chart(watts, hr):
         y=alt.Y('HR', title='Frequenza Cardiaca (bpm)', scale=alt.Scale(zero=False)),
         color=alt.value('#6C5DD3'),
         tooltip=['Watts', 'HR']
-    ).interactive()
+    ).interactive().properties(
+        height=300
+    ).configure_axis(
+        grid=False,
+        domain=False,
+        labelColor='#B2BEC3',
+        titleColor='#636E72'
+    ).configure_view(strokeWidth=0)
     
     st.altair_chart(chart, use_container_width=True)
 
@@ -99,8 +122,8 @@ def render_history_table(df):
 
 def render_trend_chart(df):
     """
-    Mostra SCORE grezzo e Media Mobile (MA7).
-    Versione 'Intelligente' con st.line_chart nativo.
+    Mostra SCORE grezzo e Media Mobile.
+    Grafico avanzato con area sfumata.
     """
     st.markdown("##### 📈 Trend Intelligente (Score vs Media 7gg)")
 
@@ -109,7 +132,6 @@ def render_trend_chart(df):
         return
 
     # Preparazione dati pulita
-    # Nota: Assicurati che SCORE_MA_7 esista nel DF (viene calcolato in app.py)
     cols = ['Data', 'SCORE']
     if 'SCORE_MA_7' in df.columns:
         cols.append('SCORE_MA_7')
@@ -121,24 +143,40 @@ def render_trend_chart(df):
     chart_data = (
         chart_data
         .dropna(subset=["SCORE"])
-        .set_index('Data')
-        .sort_index()
+        .sort_values("Data")
     )
     
-    # Rinominiamo per la legenda
-    rename_map = {'SCORE': 'Score Giornaliero'}
-    if 'SCORE_MA_7' in df.columns:
-        rename_map['SCORE_MA_7'] = 'Trend (Media 7gg)'
-        
-    chart_data = chart_data.rename(columns=rename_map)
+    # Se abbiamo la media mobile, usiamo quella per il grafico principale
+    y_col = 'SCORE_MA_7' if 'SCORE_MA_7' in df.columns else 'SCORE'
 
-    # Grafico Linee Multiplo (Nativo Streamlit = Bulletproof)
-    # Mostra due linee colorate diversamente
-    # Se manca la media mobile (vecchi dati), mostra solo una linea
-    colors = ["#FFCF96", "#FF8080"] if 'Trend (Media 7gg)' in chart_data.columns else ["#FFCF96"]
-    
-    st.line_chart(
-        chart_data, 
-        color=colors, 
-        height=250 
+    # Grafico Linee + Area
+    base = alt.Chart(chart_data).encode(x='Data:T')
+
+    area = base.mark_area(
+        line={'color':'#6C5DD3', 'strokeWidth': 3},
+        color=alt.Gradient(
+            gradient='linear',
+            stops=[alt.GradientStop(color='#6C5DD3', offset=0),
+                   alt.GradientStop(color='white', offset=1)],
+            x1=1, x2=1, y1=1, y2=0
+        ),
+        opacity=0.3
+    ).encode(y=alt.Y(y_col, scale=alt.Scale(zero=False), title=None))
+
+    points = base.mark_circle(color='#6C5DD3').encode(
+        y=y_col,
+        tooltip=['Data', y_col]
     )
+
+    chart = (area + points).properties(
+        height=250
+    ).configure_axis(
+        grid=False,           # Via la griglia
+        domain=False,         # Via le linee degli assi
+        labelColor='#B2BEC3', # Etichette grigio chiaro
+        titleColor='#636E72'  # Titoli grigio medio
+    ).configure_view(
+        strokeWidth=0         # Via il bordo quadrato attorno al grafico
+    )
+    
+    st.altair_chart(chart, use_container_width=True)
