@@ -1,4 +1,4 @@
-import math
+from config import Config
 
 class RunMetrics:
     def __init__(self, avg_power, avg_hr, distance, moving_time, elevation, weight, hr_max, hr_rest, temp, humidity):
@@ -74,15 +74,14 @@ class ScoreEngine:
     def compute_score(self, m: RunMetrics, decoupling):
         # 1. World Class Factor (Benchmark Power/Weight)
         w_kg = m.avg_power / m.weight
-        wr_wkg = 6.4 # Benchmark Elite
-        wcf = min(w_kg / wr_wkg, 1.0)
+        wcf = min(w_kg / Config.WR_WKG, 1.0)
         
         # 2. Volume Factor (Logaritmico per premiare volume senza esagerare)
         dist_km = m.distance_meters / 1000
-        vol_factor = math.log(dist_km + 1) / 4.5 
+        vol_factor = math.log(dist_km + 1) / Config.VOLUME_LOG_DIVISOR
         
         # 3. Efficiency Penalty (Malus se il cuore deriva troppo rispetto ai watt)
-        eff_penalty = max(0, decoupling - 0.05) * 2 
+        eff_penalty = max(0, decoupling - Config.DECOUPLING_THRESHOLD) * Config.DECOUPLING_PENALTY_FACTOR
         
         # 4. Intensity/HR Factor (Riserva Cardiaca usata)
         if (m.hr_max - m.hr_rest) > 0:
@@ -91,16 +90,17 @@ class ScoreEngine:
             hr_res = 0.7 # Fallback
         
         # Formula SCORE
-        raw_score = (wcf * 0.5) + (vol_factor * 0.3) + (hr_res * 0.2) - eff_penalty
+        raw_score = (wcf * Config.WEIGHT_POWER) + (vol_factor * Config.WEIGHT_VOLUME) + (hr_res * Config.WEIGHT_INTENSITY) - eff_penalty
         final_score = max(0.01, round(raw_score, 2))
         
         wr_pct = round(wcf * 100, 1)
 
         # BREAKDOWN per "Score Spiegabile"
+        # Scaling factor 100 per visualizzazione percentuale
         details = {
-            "Potenza": round(wcf * 50, 1),   # Contribuisce al 50% max
-            "Volume": round(vol_factor * 30, 1), # Contribuisce al 30% max
-            "Intensità": round(hr_res * 20, 1), # Contribuisce al 20% max
+            "Potenza": round(wcf * Config.WEIGHT_POWER * 100, 1),
+            "Volume": round(vol_factor * Config.WEIGHT_VOLUME * 100, 1),
+            "Intensità": round(hr_res * Config.WEIGHT_INTENSITY * 100, 1),
             "Malus Efficienza": round(-eff_penalty * 100, 1)
         }
 
@@ -108,8 +108,8 @@ class ScoreEngine:
         return final_score, details, wcf, wr_pct
 
     def get_rank(self, score):
-        if score > 0.35: return "🏆 Elite", "#FFD700"
-        if score > 0.28: return "🥇 Pro", "#C0C0C0"
-        if score > 0.22: return "🥈 Advanced", "#CD7F32"
-        if score > 0.15: return "🥉 Intermediate", "#4CAF50"
+        if score > Config.RANK_THRESHOLDS["ELITE"]: return "🏆 Elite", "#FFD700"
+        if score > Config.RANK_THRESHOLDS["PRO"]: return "🥇 Pro", "#C0C0C0"
+        if score > Config.RANK_THRESHOLDS["ADVANCED"]: return "🥈 Advanced", "#CD7F32"
+        if score > Config.RANK_THRESHOLDS["INTERMEDIATE"]: return "🥉 Intermediate", "#4CAF50"
         return "👟 Amateur", "#9E9E9E"

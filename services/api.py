@@ -7,19 +7,16 @@ from datetime import datetime, timedelta
 class AICoachService:
     def __init__(self, api_key):
         if not api_key:
-            raise ValueError("API Key mancante")
+            # Non bloccante se manca la chiave, ma il metodo fallirà elegantemente
+            self.model = None
+            return
         
         genai.configure(api_key=api_key)
-        
-        # Usiamo 'gemini-pro': è il modello più stabile e supportato ovunque.
-        # Se in futuro vuoi usare flash, assicurati di avere google-generativeai aggiornato.
         self.model = genai.GenerativeModel('gemini-pro')
 
     def get_feedback(self, run_data, zones):
-        """
-        Genera un feedback testuale basato sui dati della corsa.
-        """
-        # Creiamo un prompt testuale pulito
+        if not self.model: return "⚠️ API Key Gemini mancante."
+        
         prompt = f"""
         Agisci come un allenatore di corsa d'élite (stile Jack Daniels o Joe Friel).
         Analizza questa sessione di allenamento e dammi un feedback breve, diretto e motivante (max 100 parole).
@@ -58,15 +55,42 @@ class AICoachService:
         secs = int(pace_sec % 60)
         return f"{mins}:{secs:02d}"
 
-# Servizio Meteo (Lasciamolo qui o in un file separato, ma per ora è comodo qui)
 class WeatherService:
+    BASE_URL = "https://archive-api.open-meteo.com/v1/archive"
+
     @staticmethod
     def get_weather(lat, lon, date_str, hour):
-        # Mock / Placeholder - Per ora restituisce dati standard
-        # In futuro si può collegare a OpenMeteo API
-        return 20.0, 50.0 # Temp, Humidity
+        """
+        Recupera Meteo REALE storico da Open-Meteo.
+        """
+        try:
+            # Open-Meteo richiede start_date e end_date
+            params = {
+                "latitude": lat,
+                "longitude": lon,
+                "start_date": date_str,
+                "end_date": date_str,
+                "hourly": "temperature_2m,relative_humidity_2m"
+            }
+            res = requests.get(WeatherService.BASE_URL, params=params, timeout=5)
+            
+            if res.status_code == 200:
+                data = res.json()
+                if "hourly" in data:
+                    # Troviamo l'indice dell'ora richiesta (0-23)
+                    idx = min(hour, 23)
+                    temp = data["hourly"]["temperature_2m"][idx]
+                    hum = data["hourly"]["relative_humidity_2m"][idx]
+                    return float(temp), float(hum)
+            
+            # Fallback in caso di risposta strana
+            return 20.0, 50.0
+            
+        except Exception as e:
+            print(f"⚠️ Weather Error: {e}")
+            return 20.0, 50.0 # Fallback Safe
 
-# Servizio Strava (Scheletro per importazione)
+
 class StravaService:
     def __init__(self, client_id, client_secret):
         self.client_id = client_id
@@ -77,66 +101,67 @@ class StravaService:
         return f"https://www.strava.com/oauth/authorize?client_id={self.client_id}&response_type=code&redirect_uri={redirect_uri}&approval_prompt=force&scope=activity:read_all"
 
     def get_token(self, code):
-        res = requests.post("https://www.strava.com/oauth/token", data={
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "code": code,
-            "grant_type": "authorization_code"
-        })
-        if res.status_code == 200:
-            return res.json()
+        try:
+            res = requests.post("https://www.strava.com/oauth/token", data={
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "code": code,
+                "grant_type": "authorization_code"
+            }, timeout=10)
+            if res.status_code == 200:
+                return res.json()
+        except:
+            pass
+        return None
+
+    def _request_with_retry(self, method, url, headers=None, params=None, max_retries=3):
+        """Wrapper con gestione Rate Limit e Retries"""
+        for i in range(max_retries):
+            try:
+                res = requests.request(method, url, headers=headers, params=params, timeout=10)
+                
+                if res.status_code == 200:
+                    return res.json()
+                
+                if res.status_code == 429:
+                    # Rate Limit
+                    print(f"⚠️ Strava Rate Limit Hit! Waiting... (Attempt {i+1})")
+                    time.sleep(10 * (i+1)) # Backoff aggressivo
+                    continue
+                
+                # Altri errori (401, 500)
+                print(f"⚠️ Strava API Error {res.status_code}: {res.text}")
+                return None
+                
+            except requests.exceptions.RequestException as e:
+                print(f"⚠️ Network Error: {e}")
+                time.sleep(2)
+        
         return None
 
     def fetch_activities(self, token, days_back=365):
-        """
-        Scarica le attività degli ultimi X giorni (default 365).
-        Gestisce la paginazione automatica.
-        """
         headers = {"Authorization": f"Bearer {token}"}
-        
-        # 1. Calcoliamo la data di partenza (Unix Timestamp)
         start_date = datetime.now() - timedelta(days=days_back)
         epoch_time = int(start_date.timestamp())
         
         all_activities = []
         page = 1
-        keep_fetching = True
         
-        # 2. Loop per scaricare la LISTA (Paginazione)
-        while keep_fetching:
-            # Scarichiamo 50 attività alla volta per pagina
+        while True:
             url = f"{self.base_url}/athlete/activities?after={epoch_time}&per_page=50&page={page}"
-            response = requests.get(url, headers=headers)
+            data = self._request_with_retry("GET", url, headers=headers)
             
-            if response.status_code != 200:
-                break
-                
-            data = response.json()
+            if not data: break # Fine o Errore
             
-            if not data: # Se la lista è vuota, abbiamo finito
-                keep_fetching = False
-            else:
-                # Filtriamo solo le corse ('Run') subito per risparmiare tempo
-                runs = [x for x in data if x['type'] == 'Run']
-                all_activities.extend(runs)
-                page += 1
-                
-        # 3. Ora scarichiamo i DETTAGLI (Streams) per ogni corsa trovata
-        # Nota: Qui rischiamo il rate limit se ci sono >100 corse
-        results = []
-        
-        # Per evitare blocchi totali, restituiamo una lista di oggetti "pronti da scaricare"
-        # La fase di download pesante la faremo in app.py con la barra di progresso
+            runs = [x for x in data if x.get('type') == 'Run']
+            all_activities.extend(runs)
+            
+            if len(data) < 50: break # Meno di 50 elementi = ultima pagina
+            page += 1
+            
         return all_activities
 
     def fetch_streams(self, token, activity_id):
-        """
-        Scarica i dati raw (Watt, HR) per una singola attività
-        """
         headers = {"Authorization": f"Bearer {token}"}
-        s_url = f"{self.base_url}/activities/{activity_id}/streams?keys=watts,heartrate&key_by_type=true"
-        response = requests.get(s_url, headers=headers)
-        
-        if response.status_code == 200:
-            return response.json()
-        return None
+        url = f"{self.base_url}/activities/{activity_id}/streams?keys=watts,heartrate&key_by_type=true"
+        return self._request_with_retry("GET", url, headers=headers)

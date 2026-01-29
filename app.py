@@ -3,28 +3,41 @@ import pandas as pd
 import time
 from datetime import datetime, timedelta
 
-# --- 1. IMPORT MODULI ---
+# --- 1. CONFIG & VALIDATION (MUST BE FIRST) ---
+from config import Config
+
+# Check health before loading heavier modules
+missing_secrets = Config.check_secrets()
+if missing_secrets:
+    st.error(f"❌ Missing Secrets: {', '.join(missing_secrets)}. Please check `.streamlit/secrets.toml`.")
+    st.stop()
+
+# --- 2. IMPORT MODULES ---
 from engine.core import ScoreEngine, RunMetrics
 from services.api import StravaService, WeatherService, AICoachService
 from services.db import DatabaseService
 from ui.visuals import render_benchmark_chart, render_zones_chart, render_scatter_chart, render_history_table, render_trend_chart
 from ui.style import apply_custom_style
 
-# --- 2. CONFIGURAZIONE PAGINA ---
-st.set_page_config(page_title="SCORE 4.0 Pro", page_icon="🧬", layout="wide", initial_sidebar_state="collapsed")
+# --- 3. PAGE SETUP ---
+st.set_page_config(page_title=Config.APP_TITLE, page_icon=Config.APP_ICON, layout="wide", initial_sidebar_state="collapsed")
 apply_custom_style()
 
-# --- 3. CONFIGURAZIONE & SERVIZI ---
-strava_conf = st.secrets.get("strava", {})
-gemini_conf = st.secrets.get("gemini", {})
-supa_conf = st.secrets.get("supabase", {})
+# --- 4. SERVICES INIT ---
+# Secrets are guaranteed to exist by check_secrets()
+strava_creds = Config.get_strava_creds()
+supa_creds = Config.get_supabase_creds()
+gemini_key = Config.get_gemini_key()
 
-auth_svc = StravaService(strava_conf.get("client_id", ""), strava_conf.get("client_secret", ""))
-db_svc = DatabaseService(supa_conf.get("url", ""), supa_conf.get("key", ""))
+auth_svc = StravaService(strava_creds["client_id"], strava_creds["client_secret"])
+db_svc = DatabaseService(supa_creds["url"], supa_creds["key"])
 
-# --- 4. GESTIONE STATO ---
+import concurrent.futures
+
+# --- 5. STATE MANAGEMENT ---
 if "strava_token" not in st.session_state: st.session_state.strava_token = None
 if "data" not in st.session_state: st.session_state.data = db_svc.get_history()
+if "demo_mode" not in st.session_state: st.session_state.demo_mode = False
 
 # Callback Auth
 if "code" in st.query_params and not st.session_state.strava_token:
@@ -34,9 +47,13 @@ if "code" in st.query_params and not st.session_state.strava_token:
         st.query_params.clear()
         st.rerun()
 
-# --- 5. HEADER & PROFILE ---
+# --- 6. HEADER & PROFILE ---
 col_head, col_prof = st.columns([3, 1], gap="large")
-with col_head: st.title("🏃‍♂️ SCORE 4.0 Pro")
+with col_head: 
+    st.title(Config.APP_TITLE)
+    if st.session_state.demo_mode:
+        st.caption("🔴 DEMO MODE - Dati simulati")
+
 with col_prof:
     if st.session_state.strava_token:
         ath = st.session_state.strava_token.get("athlete", {})
@@ -44,29 +61,47 @@ with col_prof:
         if st.button("Logout", key="logout"):
             st.session_state.strava_token = None
             st.rerun()
-    elif strava_conf.get("client_id"):
-        st.link_button("🔗 Connetti Strava", auth_svc.get_link("https://scorerun.streamlit.app/"), type="primary", use_container_width=True)
+    elif st.session_state.demo_mode:
+        st.markdown(f"<div style='text-align:right'><strong>Utente Demo</strong></div>", unsafe_allow_html=True)
+        if st.button("Esci Demo"):
+            st.session_state.demo_mode = False
+            st.session_state.data = []
+            st.rerun()
+    else:
+        c_login, c_demo = st.columns([3, 2])
+        with c_login:
+            st.link_button("🔗 Connetti Strava", auth_svc.get_link("https://scorerun.streamlit.app/"), type="primary", use_container_width=True)
+        with c_demo:
+            if st.button("👀 Demo", use_container_width=True):
+                st.session_state.demo_mode = True
+                # Carica dati finti
+                st.session_state.data = [
+                    {"id": 101, "Data": datetime.now()-timedelta(days=1), "Dist (km)": 10.5, "Power": 240, "HR": 155, "Decoupling": 3.2, "SCORE": 0.29, "Rank": "🥇 Pro", "WR_Pct": 76.5, "Meteo": "18.5°C", "raw_watts": [240]*2000, "raw_hr": [155]*2000},
+                    {"id": 102, "Data": datetime.now()-timedelta(days=3), "Dist (km)": 21.1, "Power": 230, "HR": 160, "Decoupling": 6.5, "SCORE": 0.31, "Rank": "🏆 Elite", "WR_Pct": 73.0, "Meteo": "22.0°C", "raw_watts": [230]*4000, "raw_hr": [160]*4000},
+                    {"id": 103, "Data": datetime.now()-timedelta(days=6), "Dist (km)": 5.0, "Power": 260, "HR": 165, "Decoupling": 1.1, "SCORE": 0.18, "Rank": "🥉 Intermediate", "WR_Pct": 68.5, "Meteo": "15.0°C", "raw_watts": [260]*1000, "raw_hr": [165]*1000},
+                ]
+                st.rerun()
 
-# --- 6. PARAMETRI ATLETA (Con ETÀ per Percentile) ---
-weight, hr_max, hr_rest, ftp, age = 70.0, 185, 50, 250, 30 # Default
+# --- 7. ATHLETE PARAMS ---
+weight, hr_max, hr_rest, ftp, age = Config.DEFAULT_WEIGHT, Config.DEFAULT_HR_MAX, Config.DEFAULT_HR_REST, Config.DEFAULT_FTP, Config.DEFAULT_AGE
 
 if st.session_state.strava_token:
     ath = st.session_state.strava_token.get("athlete", {})
-    def_w = float(ath.get('weight', 0)) if ath.get('weight', 0) > 0 else 70.0
+    def_w = float(ath.get('weight', 0)) if ath.get('weight', 0) > 0 else Config.DEFAULT_WEIGHT
     
     with st.expander("⚙️ Profilo Atleta (Parametri)", expanded=False):
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1: weight = st.number_input("Peso (kg)", value=def_w)
-        with c2: hr_max = st.number_input("FC Max", value=185)
-        with c3: hr_rest = st.number_input("FC Riposo", value=50)
-        with c4: ftp = st.number_input("FTP (W)", value=250)
-        with c5: age = st.number_input("Età", value=35, help="Fondamentale per il calcolo percentile")
+        with c2: hr_max = st.number_input("FC Max", value=Config.DEFAULT_HR_MAX)
+        with c3: hr_rest = st.number_input("FC Riposo", value=Config.DEFAULT_HR_REST)
+        with c4: ftp = st.number_input("FTP (W)", value=Config.DEFAULT_FTP)
+        with c5: age = st.number_input("Età", value=Config.DEFAULT_AGE, help="Fondamentale per il calcolo percentile")
 
 st.divider()
 
-# --- 7. MAIN LOGIC ---
-if not st.session_state.strava_token:
-    st.info("👆 Connetti Strava per accedere alla Dashboard Pro.")
+# --- 8. MAIN LOGIC ---
+if not st.session_state.strava_token and not st.session_state.demo_mode:
+    st.info("👆 Connetti Strava per accedere alla Dashboard Pro o prova la modalità Demo.")
 else:
     # TOOLBAR (Refresh & Filtro)
     spL, col_ctrl, spR = st.columns([3, 2, 3])
@@ -77,55 +112,80 @@ else:
             sel_label = st.selectbox("Periodo:", list(opts.keys()), index=2)
             days_fetch = opts[sel_label]
         with c_btn:
-            do_sync = st.button("🔄 Sync", type="primary", use_container_width=True)
+            do_sync = st.button("🔄 Sync", type="primary", use_container_width=True, disabled=st.session_state.demo_mode)
 
-    # SYNC ENGINE
-    if do_sync:
+    # SYNC ENGINE (PARALLEL)
+    if do_sync and not st.session_state.demo_mode:
         eng = ScoreEngine()
         aid = st.session_state.strava_token.get("athlete", {}).get("id", 0)
         tk = st.session_state.strava_token["access_token"]
         
-        with st.spinner(f"Sincronizzazione ({sel_label})..."):
+        with st.status(f"Analisi attività in corso ({sel_label})...", expanded=True) as status:
+            st.write("📥 Scaricamento lista attività da Strava...")
             act_list = auth_svc.fetch_activities(tk, days_back=days_fetch)
-        
-        if not act_list: st.warning("Nessuna attività trovata.")
-        else:
-            p_bar = st.progress(0); st_txt = st.empty(); new_cnt = 0
-            ex_ids = [r['id'] for r in st.session_state.data]
             
-            for i, s in enumerate(act_list):
-                p_bar.progress((i+1)/len(act_list))
-                if s['id'] in ex_ids: time.sleep(0.001); continue
+            if not act_list: 
+                status.update(label="Nessuna attività trovata.", state="error")
+            else:
+                # Filtraggio esistenti
+                ex_ids = [r['id'] for r in st.session_state.data]
+                to_process = [s for s in act_list if s['id'] not in ex_ids]
                 
-                streams = auth_svc.fetch_streams(tk, s['id'])
-                if streams and 'watts' in streams and 'heartrate' in streams:
-                    dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
-                    lat_lng = s.get('start_latlng', [])
-                    t, h = WeatherService.get_weather(lat_lng[0], lat_lng[1], dt.strftime("%Y-%m-%d"), dt.hour) if lat_lng else (20.0, 50.0)
-                    if not t: t, h = 20.0, 50.0
+                if not to_process:
+                    status.update(label="Tutte le attività sono già aggiornate!", state="complete")
+                else:
+                    st.write(f"⚙️ Elaborazione di {len(to_process)} nuove attività...")
+                    p_bar = st.progress(0)
+                    new_cnt = 0
+                    
+                    # Funzione worker per processare singola attività
+                    def process_activity(s):
+                        try:
+                            streams = auth_svc.fetch_streams(tk, s['id'])
+                            if streams and 'watts' in streams and 'heartrate' in streams:
+                                dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
+                                lat_lng = s.get('start_latlng', [])
+                                
+                                # Meteo Reale
+                                t, h = 20.0, 50.0
+                                if lat_lng:
+                                    t, h = WeatherService.get_weather(lat_lng[0], lat_lng[1], dt.strftime("%Y-%m-%d"), dt.hour)
+                                
+                                m = RunMetrics(s.get('average_watts', 0), s.get('average_heartrate', 0), s.get('distance', 0), s.get('moving_time', 0), s.get('total_elevation_gain', 0), weight, hr_max, hr_rest, t, h)
+                                dec = eng.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
+                                
+                                score, details, wcf, wr_p = eng.compute_score(m, dec)
+                                rnk, _ = eng.get_rank(score)
+                                
+                                return {
+                                    "id": s['id'], "Data": dt.strftime("%Y-%m-%d"), 
+                                    "Dist (km)": round(m.distance_meters/1000, 2),
+                                    "Power": int(m.avg_power), "HR": int(m.avg_hr),
+                                    "Decoupling": round(dec*100, 1), "WCF": round(wcf, 2),
+                                    "SCORE": round(score, 2), "WR_Pct": round(wr_p, 1),
+                                    "Rank": rnk, "Meteo": f"{t}°C",
+                                    "SCORE_DETAIL": details,
+                                    "raw_watts": streams['watts']['data'], "raw_hr": streams['heartrate']['data']
+                                }
+                        except Exception as e:
+                            print(f"Error processing {s['id']}: {e}")
+                            return None
+                        return None
 
-                    m = RunMetrics(s.get('average_watts', 0), s.get('average_heartrate', 0), s.get('distance', 0), s.get('moving_time', 0), s.get('total_elevation_gain', 0), weight, hr_max, hr_rest, t, h)
-                    dec = eng.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
+                    # Parallel Execution
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                        futures = {executor.submit(process_activity, s): s for s in to_process}
+                        
+                        for i, future in enumerate(concurrent.futures.as_completed(futures)):
+                            res = future.result()
+                            if res:
+                                db_svc.save_run(res, aid) # Save to DB synchronous (safer for SQLite/Supabase concurrent limits)
+                                new_cnt += 1
+                            p_bar.progress((i+1)/len(to_process))
                     
-                    # NUOVO UNPACKING (4 valori)
-                    score, details, wcf, wr_p = eng.compute_score(m, dec)
-                    rnk, _ = eng.get_rank(score)
-                    
-                    run_obj = {
-                        "id": s['id'], "Data": dt.strftime("%Y-%m-%d"), 
-                        "Dist (km)": round(m.distance_meters/1000, 2),
-                        "Power": int(m.avg_power), "HR": int(m.avg_hr),
-                        "Decoupling": round(dec*100, 1), "WCF": round(wcf, 2),
-                        "SCORE": round(score, 2), "WR_Pct": round(wr_p, 1),
-                        "Rank": rnk, "Meteo": f"{t}°C",
-                        "SCORE_DETAIL": details, # Salviamo i dettagli (se DB supporta JSON)
-                        "raw_watts": streams['watts']['data'], "raw_hr": streams['heartrate']['data']
-                    }
-                    if db_svc.save_run(run_obj, aid): new_cnt += 1
-                time.sleep(0.1)
-            
-            p_bar.empty(); st_txt.empty(); st.session_state.data = db_svc.get_history()
-            if new_cnt: st.balloons(); st.success(f"+{new_cnt} attività!"); time.sleep(1); st.rerun()
+                    st.session_state.data = db_svc.get_history()
+                    status.update(label=f"Completato! Aggiunte {new_cnt} attività.", state="complete")
+                    if new_cnt: st.balloons(); time.sleep(1); st.rerun()
 
     # --- DASHBOARD INTELLIGENTE ---
     if st.session_state.data:
