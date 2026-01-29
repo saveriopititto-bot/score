@@ -12,6 +12,12 @@ class RunMetrics:
         self.hr_rest = hr_rest
         self.temp = temp
         self.humidity = humidity
+        
+    @property
+    def avg_speed_mps(self):
+        if self.moving_time_seconds > 0:
+            return self.distance_meters / self.moving_time_seconds
+        return 0
 
 class ScoreEngine:
     def calculate_zones(self, watts_stream, ftp):
@@ -24,6 +30,7 @@ class ScoreEngine:
             elif w < 1.05 * ftp: zones["Z4"] += 1
             else: zones["Z5"] += 1
         total = len(watts_stream)
+        if total == 0: return zones
         return {k: round((v/total)*100, 1) for k, v in zones.items()}
 
     def calculate_decoupling(self, power_stream, hr_stream):
@@ -49,14 +56,18 @@ class ScoreEngine:
 
     def age_adjusted_percentile(self, score, age):
         """Calcola il percentile basato sull'età (Mock statistico)"""
+        # Semplificazione statistica: i punteggi calano con l'età.
+        # Definiamo la 'media' (mu) e 'deviazione standard' (sigma) attesa per fascia.
         if age < 30: mu, sigma = 0.22, 0.05
         elif age < 40: mu, sigma = 0.20, 0.05
         elif age < 50: mu, sigma = 0.18, 0.04
         else: mu, sigma = 0.16, 0.04
         
-        # Z-score semplificato
+        # Z-score: quanto sei distante dalla media della tua età?
         z = (score - mu) / sigma
-        # Conversione approssimativa Z -> Percentile (50 + Z*34 per 1 sigma)
+        
+        # Conversione approssimativa Z -> Percentile (Base 50%, 1 sigma = +34%)
+        # Formula semplificata per evitare import scipy
         pct = 50 + (z * 34)
         return max(1.0, min(99.9, round(pct, 1)))
 
@@ -66,16 +77,20 @@ class ScoreEngine:
         wr_wkg = 6.4 # Benchmark Elite
         wcf = min(w_kg / wr_wkg, 1.0)
         
-        # 2. Volume Factor (Non lineare)
+        # 2. Volume Factor (Logaritmico per premiare volume senza esagerare)
         dist_km = m.distance_meters / 1000
         vol_factor = math.log(dist_km + 1) / 4.5 
         
-        # 3. Efficiency Penalty
+        # 3. Efficiency Penalty (Malus se il cuore deriva troppo rispetto ai watt)
         eff_penalty = max(0, decoupling - 0.05) * 2 
         
-        # 4. Intensity/HR Factor
-        hr_res = (m.avg_hr - m.hr_rest) / (m.hr_max - m.hr_rest)
+        # 4. Intensity/HR Factor (Riserva Cardiaca usata)
+        if (m.hr_max - m.hr_rest) > 0:
+            hr_res = (m.avg_hr - m.hr_rest) / (m.hr_max - m.hr_rest)
+        else:
+            hr_res = 0.7 # Fallback
         
+        # Formula SCORE
         raw_score = (wcf * 0.5) + (vol_factor * 0.3) + (hr_res * 0.2) - eff_penalty
         final_score = max(0.01, round(raw_score, 2))
         
@@ -89,7 +104,7 @@ class ScoreEngine:
             "Malus Efficienza": round(-eff_penalty * 100, 1)
         }
 
-        # NOTA: Restituiamo 4 valori ora! Aggiornare app.py
+        # NOTA: Restituiamo 4 valori ora! (score, details, wcf, wr_pct)
         return final_score, details, wcf, wr_pct
 
     def get_rank(self, score):
