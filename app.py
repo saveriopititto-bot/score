@@ -82,22 +82,78 @@ with col_prof:
                 ]
                 st.rerun()
 
-# --- 7. ATHLETE PARAMS ---
-weight, hr_max, hr_rest, ftp, age = Config.DEFAULT_WEIGHT, Config.DEFAULT_HR_MAX, Config.DEFAULT_HR_REST, Config.DEFAULT_FTP, Config.DEFAULT_AGE
+# --- 6. PARAMETRI ATLETA (Auto-Sync Strava Avanzato) ---
+# Valori di default caricati dalla Configurazione
+weight = Config.DEFAULT_WEIGHT
+hr_max = Config.DEFAULT_HR_MAX
+hr_rest = Config.DEFAULT_HR_REST
+ftp = Config.DEFAULT_FTP
+age = Config.DEFAULT_AGE
+zones_data = None
 
 if st.session_state.strava_token:
+    token = st.session_state.strava_token["access_token"]
     ath = st.session_state.strava_token.get("athlete", {})
-    def_w = float(ath.get('weight', 0)) if ath.get('weight', 0) > 0 else Config.DEFAULT_WEIGHT
     
-    with st.expander("⚙️ Profilo Atleta (Parametri)", expanded=False):
-        c1, c2, c3, c4, c5 = st.columns(5)
-        with c1: weight = st.number_input("Peso (kg)", value=def_w)
-        with c2: hr_max = st.number_input("FC Max", value=Config.DEFAULT_HR_MAX)
-        with c3: hr_rest = st.number_input("FC Riposo", value=Config.DEFAULT_HR_REST)
-        with c4: ftp = st.number_input("FTP (W)", value=Config.DEFAULT_FTP)
-        with c5: age = st.number_input("Età", value=Config.DEFAULT_AGE, help="Fondamentale per il calcolo percentile")
+    # 1. RECUPERO DATI BASE (Peso, FTP, Età)
+    strava_weight = ath.get('weight', 0)
+    if strava_weight: weight = float(strava_weight)
+    
+    strava_ftp = ath.get('ftp', 0)
+    if strava_ftp: ftp = int(strava_ftp)
+    
+    # Tentativo calcolo età (se disponibile)
+    # Strava a volte nasconde la data di nascita, ma proviamoci
+    birthdate = ath.get('birthdate') # Formato atteso: "YYYY-MM-DD"
+    if birthdate:
+        try:
+            b_year = int(birthdate.split("-")[0])
+            age = datetime.now().year - b_year
+        except: pass
 
-st.divider()
+    # 2. RECUPERO AVANZATO (FC MAX DALLE ZONE)
+    # Questa chiamata la salviamo in session_state per non ripeterla ad ogni click (risparmiamo API)
+    if "strava_zones" not in st.session_state:
+        with st.spinner("Sincronizzazione dati biometrici..."):
+            st.session_state.strava_zones = auth_svc.fetch_zones(token)
+    
+    zones_data = st.session_state.strava_zones
+    
+    # Analisi del JSON delle zone per trovare la Max Heart Rate
+    if zones_data:
+        hr_zones = zones_data.get("heart_rate", {}).get("zones", [])
+        if hr_zones:
+            # L'ultima zona ha il campo 'max' che corrisponde alla FC Max impostata su Strava
+            extracted_max = hr_zones[-1].get("max")
+            if extracted_max:
+                hr_max = int(extracted_max)
+                # Opzionale: Se volessimo stimare la FC Riposo potremmo usare formule, 
+                # ma è meglio lasciarla manuale per precisione.
+
+    # 3. INTERFACCIA UTENTE (Pre-compilata)
+    with st.expander("⚙️ Profilo Atleta & Parametri Fisici", expanded=False):
+        c1, c2, c3, c4, c5 = st.columns(5)
+        
+        with c1: 
+            weight = st.number_input("Peso (kg)", value=float(weight), step=0.5, help="Sincronizzato da Strava")
+        with c2: 
+            hr_max = st.number_input("FC Max", value=int(hr_max), help="Sincronizzato dalle tue Zone Strava")
+        with c3: 
+            hr_rest = st.number_input("FC Riposo", value=int(hr_rest), help="Inserisci manualmente (importante per l'algoritmo)")
+        with c4: 
+            ftp = st.number_input("FTP (W)", value=int(ftp), help="Da Strava (se impostata)")
+        with c5: 
+            age = st.number_input("Età", value=int(age), help="Per calcolo percentile")
+
+        # Feedback visivo per l'utente
+        if zones_data:
+            st.caption(f"✅ Dati sincronizzati da Strava (Peso: {weight}kg, FC Max rilevata: {hr_max} bpm)")
+        else:
+            st.caption("⚠️ Impossibile leggere le Zone Cardiache da Strava. Verifica i permessi o inserisci FC Max manualmente.")
+
+else:
+    # Caso Utente Non Loggato: non mostrare i controlli o usa i default
+    pass
 
 # --- 8. MAIN LOGIC ---
 if not st.session_state.strava_token and not st.session_state.demo_mode:
