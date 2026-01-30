@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
+from ui.feedback import render_feedback_form
 from datetime import datetime, timedelta
 
 # --- 1. CONFIG & VALIDATION ---
@@ -95,6 +96,14 @@ if not st.session_state.strava_token:
                 }
                 st.rerun()
 
+        # --- SEZIONE FEEDBACK ---
+        # Recuperiamo ID e Nome per sapere chi scrive
+        u_id = ath.get("id")
+        u_name = f"{ath.get('firstname', '')} {ath.get('lastname', '')}"
+
+        # Renderizziamo il form
+        render_feedback_form(db_svc, u_id, u_name)
+
         st.markdown("<br><br>", unsafe_allow_html=True)
         render_legal_section()
 
@@ -129,12 +138,12 @@ else:
 
     # --- DEBUG TOOL (Per vedere cosa invia Strava) ---
     # Utile per capire se FTP/HR mancano dalla fonte
-    with st.expander("🕵️‍♂️ Debug Dati Strava (Solo per sviluppatore)", expanded=False):
-        st.write("Dati Profilo ricevuti:", ath)
-        if "strava_zones" in st.session_state:
-            st.write("Dati Zone ricevuti:", st.session_state.strava_zones)
-        else:
-            st.write("Nessuna zona scaricata ancora.")
+    #with st.expander("🕵️‍♂️ Debug Dati Strava (Solo per sviluppatore)", expanded=False):
+    #   st.write("Dati Profilo ricevuti:", ath)
+    #   if "strava_zones" in st.session_state:
+    #       st.write("Dati Zone ricevuti:", st.session_state.strava_zones)
+    #   else:
+    #       st.write("Nessuna zona scaricata ancora.")
 
 # --- 7. CONFIGURAZIONE ATLETA (Smart Sync: DB + Strava + Reverse Engineering) ---
     # Inizializziamo variabili con i default
