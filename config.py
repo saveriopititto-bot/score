@@ -2,8 +2,8 @@ import streamlit as st
 
 class Config:
     # --- GLOBAL CONSTANTS ---
-    APP_TITLE = "SCORE 4.0 Pro"
-    APP_ICON = "🏃‍♂️"
+    APP_TITLE = "sCore"
+    APP_ICON = "favicon.png"
     
     # --- ALGORITHM PARAMETERS ---
     # World Record Benchmark (Elite standard)
@@ -69,3 +69,4 @@ class Config:
     @staticmethod
     def get_gemini_key():
         return st.secrets.get("gemini", {}).get("api_key")
+
