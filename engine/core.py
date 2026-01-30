@@ -1,116 +1,177 @@
-import math
-from config import Config
+import numpy as np
+
+def clip(x, low, high):
+    return max(low, min(x, high))
 
 class RunMetrics:
-    def __init__(self, avg_power, avg_hr, distance, moving_time, elevation, weight, hr_max, hr_rest, temp, humidity):
+    def __init__(self, avg_power, avg_hr, distance, moving_time, elevation_gain, weight, hr_max, hr_rest, temp_c, humidity):
         self.avg_power = avg_power
         self.avg_hr = avg_hr
         self.distance_meters = distance
-        self.moving_time_seconds = moving_time
-        self.elevation_gain = elevation
-        self.weight = weight
+        self.moving_time = moving_time
+        self.elevation_gain = elevation_gain
+        self.weight = weight if weight > 0 else 70.0 # Evita div by zero
         self.hr_max = hr_max
         self.hr_rest = hr_rest
-        self.temp = temp
+        self.temperature = temp_c
         self.humidity = humidity
-        
-    @property
-    def avg_speed_mps(self):
-        if self.moving_time_seconds > 0:
-            return self.distance_meters / self.moving_time_seconds
-        return 0
 
 class ScoreEngine:
-    def calculate_zones(self, watts_stream, ftp):
-        if not watts_stream or not ftp: return {}
-        zones = {"Z1": 0, "Z2": 0, "Z3": 0, "Z4": 0, "Z5": 0}
-        for w in watts_stream:
-            if w < 0.55 * ftp: zones["Z1"] += 1
-            elif w < 0.75 * ftp: zones["Z2"] += 1
-            elif w < 0.90 * ftp: zones["Z3"] += 1
-            elif w < 1.05 * ftp: zones["Z4"] += 1
-            else: zones["Z5"] += 1
-        total = len(watts_stream)
-        if total == 0: return zones
-        return {k: round((v/total)*100, 1) for k, v in zones.items()}
-
+    
     def calculate_decoupling(self, power_stream, hr_stream):
+        """
+        Calcola il disaccoppiamento aerobico (Pw:Hr).
+        Ritorna un valore decimale (es. 0.035 per 3.5%).
+        """
         if not power_stream or not hr_stream or len(power_stream) != len(hr_stream):
             return 0.0
-        
-        # Split in due metà
-        mid = len(power_stream) // 2
-        p1, p2 = power_stream[:mid], power_stream[mid:]
-        h1, h2 = hr_stream[:mid], hr_stream[mid:]
-        
-        # Gestione divisione per zero
-        avg_p1 = sum(p1)/len(p1) if len(p1) > 0 else 1
-        avg_p2 = sum(p2)/len(p2) if len(p2) > 0 else 1
-        avg_h1 = sum(h1)/len(h1) if len(h1) > 0 else 1
-        avg_h2 = sum(h2)/len(h2) if len(h2) > 0 else 1
-        
-        ratio1 = avg_p1 / avg_h1 if avg_h1 > 0 else 0
-        ratio2 = avg_p2 / avg_h2 if avg_h2 > 0 else 0
-        
-        if ratio1 == 0: return 0.0
-        return (ratio1 - ratio2) / ratio1
 
-    def age_adjusted_percentile(self, score, age):
-        """Calcola il percentile basato sull'età (Mock statistico)"""
-        # Semplificazione statistica: i punteggi calano con l'età.
-        # Definiamo la 'media' (mu) e 'deviazione standard' (sigma) attesa per fascia.
-        if age < 30: mu, sigma = 0.22, 0.05
-        elif age < 40: mu, sigma = 0.20, 0.05
-        elif age < 50: mu, sigma = 0.18, 0.04
-        else: mu, sigma = 0.16, 0.04
-        
-        # Z-score: quanto sei distante dalla media della tua età?
-        z = (score - mu) / sigma
-        
-        # Conversione approssimativa Z -> Percentile (Base 50%, 1 sigma = +34%)
-        # Formula semplificata per evitare import scipy
-        pct = 50 + (z * 34)
-        return max(1.0, min(99.9, round(pct, 1)))
+        length = len(power_stream)
+        half_point = length // 2
 
-    def compute_score(self, m: RunMetrics, decoupling):
-        # 1. World Class Factor (Benchmark Power/Weight)
+        # Prima metà
+        p1 = np.mean(power_stream[:half_point])
+        h1 = np.mean(hr_stream[:half_point])
+        
+        # Seconda metà
+        p2 = np.mean(power_stream[half_point:])
+        h2 = np.mean(hr_stream[half_point:])
+
+        if h1 == 0 or h2 == 0 or p1 == 0: 
+            return 0.0
+
+        ratio1 = p1 / h1
+        ratio2 = p2 / h2
+
+        decoupling = (ratio1 - ratio2) / ratio1
+        return decoupling
+
+    def calculate_zones(self, watts_stream, ftp):
+        """Calcola distribuzione zone per i grafici"""
+        if not watts_stream or not ftp: return {}
+        zones = [0]*7
+        # Coggan Zones
+        limits = [0.55, 0.75, 0.90, 1.05, 1.20, 1.50] 
+        for w in watts_stream:
+            if w < ftp * limits[0]: zones[0]+=1
+            elif w < ftp * limits[1]: zones[1]+=1
+            elif w < ftp * limits[2]: zones[2]+=1
+            elif w < ftp * limits[3]: zones[3]+=1
+            elif w < ftp * limits[4]: zones[4]+=1
+            elif w < ftp * limits[5]: zones[5]+=1
+            else: zones[6]+=1
+        total = len(watts_stream)
+        return {f"Z{i+1}": round(c/total*100, 1) for i, c in enumerate(zones)}
+
+    def compute_score_4_1_math(self, W_avg, ascent, distance, HR_avg, HR_rest, HR_max, T_act, T_ref, D, T_hours, temp_c, humidity, alpha=0.8, beta=3.0, gamma=2.0, W_ref=6.0):
+        """
+        SCORE 4.1 – Implementazione matematica pura fornita
+        """
+        # 1. Potenza corretta dislivello
+        G = ascent / max(distance, 1)
+        W_adj = W_avg * (1 + G)
+        W_eff = np.log(1 + W_adj / W_ref)
+
+        # 2. HRR robusta
+        HRR = (HR_avg - HR_rest) / max(HR_max - HR_rest, 1)
+        HRR_clip = clip(HRR, 0.30, 0.95)
+        HRR_eff = np.log(1 + beta * HRR_clip)
+
+        # 3. Weather Correction Factor (WCF)
+        WCF = (
+            1
+            + max(0, 0.012 * (temp_c - 20))
+            + max(0, 0.005 * (humidity - 60))
+        )
+
+        # 4. Performance relativa
+        P = T_ref / max(T_act, 1)
+        P_clip = clip(P, 0.6, 1.2)
+        P_eff = np.log(1 + gamma * P_clip)
+
+        # 5. Stabilità cardiovascolare
+        # Nota: D qui deve essere percentuale (es. 3.5 per dire 3.5%) o decimale?
+        # Assumiamo che l'input D sia percentuale (es. 5.0) per far funzionare bene sqrt(D) con alpha 0.8
+        stability = np.exp(-alpha * np.sqrt(abs(D) / max(T_hours, 1e-6)))
+
+        # 6. SCORE finale
+        raw_score = (
+            W_eff
+            * (WCF * P_eff / HRR_eff)
+            * stability
+        )
+        
+        return raw_score, WCF, P
+
+    def compute_score(self, m: RunMetrics, decoupling_decimal):
+        """
+        Wrapper che collega l'app alla matematica 4.1
+        """
+        # Preparazione Dati per l'algoritmo
+        
+        # 1. Watt per Kg
         w_kg = m.avg_power / m.weight
-        wcf = min(w_kg / Config.WR_WKG, 1.0)
-        
-        # 2. Volume Factor (Logaritmico per premiare volume senza esagerare)
-        dist_km = m.distance_meters / 1000
-        vol_factor = math.log(dist_km + 1) / Config.VOLUME_LOG_DIVISOR
-        
-        # 3. Efficiency Penalty (Malus se il cuore deriva troppo rispetto ai watt)
-        eff_penalty = max(0, decoupling - Config.DECOUPLING_THRESHOLD) * Config.DECOUPLING_PENALTY_FACTOR
-        
-        # 4. Intensity/HR Factor (Riserva Cardiaca usata)
-        if (m.hr_max - m.hr_rest) > 0:
-            hr_res = (m.avg_hr - m.hr_rest) / (m.hr_max - m.hr_rest)
-        else:
-            hr_res = 0.7 # Fallback
-        
-        # Formula SCORE
-        raw_score = (wcf * Config.WEIGHT_POWER) + (vol_factor * Config.WEIGHT_VOLUME) + (hr_res * Config.WEIGHT_INTENSITY) - eff_penalty
-        final_score = max(0.01, round(raw_score, 2))
-        
-        wr_pct = round(wcf * 100, 1)
 
-        # BREAKDOWN per "Score Spiegabile"
-        # Scaling factor 100 per visualizzazione percentuale
+        # 2. Tempo di Riferimento (T_ref)
+        # Stimiamo un passo elite standard (es. 2:52/km o 5.8 m/s) per calcolare
+        # quanto tempo ci metterebbe un elite a fare questa distanza.
+        ELITE_SPEED_M_S = 5.8
+        t_ref_seconds = m.distance_meters / ELITE_SPEED_M_S
+
+        # 3. Decoupling in formato percentuale (es. 3.5 invece di 0.035) per la formula
+        d_percent = decoupling_decimal * 100 
+        
+        # 4. Durata in ore
+        t_hours = m.moving_time / 3600.0
+
+        # --- ESECUZIONE ALGORITMO 4.1 ---
+        raw_score, wcf, p_ratio = self.compute_score_4_1_math(
+            W_avg=w_kg,
+            ascent=m.elevation_gain,
+            distance=m.distance_meters,
+            HR_avg=m.avg_hr,
+            HR_rest=m.hr_rest,
+            HR_max=m.hr_max,
+            T_act=m.moving_time,
+            T_ref=t_ref_seconds,
+            D=d_percent,
+            T_hours=t_hours,
+            temp_c=m.temperature,
+            humidity=m.humidity
+        )
+
+        # --- POST PROCESSING ---
+        
+        # Scaling del punteggio (La formula raw esce bassa, tipo 0.4 - 0.8)
+        # Moltiplichiamo per 100 o 200 per avere un indice leggibile su scala 0-100
+        # Tuning sperimentale: Moltiplicatore 250 porta un raw di 0.3 a 75.
+        SCALING_FACTOR = 280.0 
+        final_score = raw_score * SCALING_FACTOR
+        
+        # Percentuale rispetto al Record del Mondo (usiamo P della formula)
+        wr_pct = p_ratio * 100
+
+        # Costruzione Dettagli per la UI
+        # Cerchiamo di attribuire il punteggio ai vari fattori
         details = {
-            "Potenza": round(wcf * Config.WEIGHT_POWER * 100, 1),
-            "Volume": round(vol_factor * Config.WEIGHT_VOLUME * 100, 1),
-            "Intensità": round(hr_res * Config.WEIGHT_INTENSITY * 100, 1),
-            "Malus Efficienza": round(-eff_penalty * 100, 1)
+            "Potenza": round(w_kg * 10, 1),           # Proxy visivo
+            "Volume": round(t_hours * 10, 1),         # Proxy visivo
+            "Intensità": round(m.avg_hr / m.hr_max * 100, 0),
+            "Malus Efficienza": f"-{round(abs(d_percent), 1)}%" if d_percent > 5 else "OK"
         }
 
-        # NOTA: Restituiamo 4 valori ora! (score, details, wcf, wr_pct)
         return final_score, details, wcf, wr_pct
 
     def get_rank(self, score):
-        if score > Config.RANK_THRESHOLDS["ELITE"]: return "🏆 Elite", "#FFD700"
-        if score > Config.RANK_THRESHOLDS["PRO"]: return "🥇 Pro", "#C0C0C0"
-        if score > Config.RANK_THRESHOLDS["ADVANCED"]: return "🥈 Advanced", "#CD7F32"
-        if score > Config.RANK_THRESHOLDS["INTERMEDIATE"]: return "🥉 Intermediate", "#4CAF50"
-        return "👟 Amateur", "#9E9E9E"
+        if score >= 100: return "ELITE 🏆", "text-purple-600"
+        if score >= 85: return "PRO 🥇", "text-blue-600"
+        if score >= 70: return "ADVANCED 🥈", "text-green-600"
+        if score >= 50: return "INTERMEDIATE 🥉", "text-yellow-600"
+        return "ROOKIE 🎗️", "text-gray-600"
+
+    def age_adjusted_percentile(self, score, age):
+        # Semplice logica di percentile basata sull'età
+        base = 50
+        if age > 30: base += (age - 30) * 0.5
+        pct = min(99, (score / 100) * base + 30)
+        return int(pct)
