@@ -73,7 +73,7 @@ if not st.session_state.strava_token:
         </div>
         """, unsafe_allow_html=True)
         
-        # URL APP (Inserisci il tuo link finale qui)
+        # URL APP
         redirect_url = "https://scorerun.streamlit.app/" 
         link_strava = auth_svc.get_link(redirect_url)
         
@@ -222,7 +222,6 @@ else:
             activities_list = auth_svc.fetch_activities(token, days_back=days_to_fetch)
             
             if activities_list:
-                # Recupera gli ID esistenti per evitare duplicati (ma se hai pulito il DB, sarà vuoto)
                 existing_ids = [r['id'] for r in st.session_state.data]
                 count_new = 0
                 bar = st.progress(0)
@@ -230,21 +229,18 @@ else:
                 for i, s in enumerate(activities_list):
                     bar.progress((i + 1) / len(activities_list))
                     
-                    # Logica: Aggiorniamo se non esiste OPPURE se esiste ma vogliamo forzare il ricalcolo
-                    # Per ora, scarichiamo solo i nuovi o quelli mancanti
                     if s['id'] in existing_ids: continue 
 
                     streams = auth_svc.fetch_streams(token, s['id'])
                     if streams and 'watts' in streams and 'heartrate' in streams:
                         dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
-                        t, h = 20.0, 50.0 # Placeholder Meteo o Api reale
+                        t, h = 20.0, 50.0 
                         if s.get('start_latlng'):
                              t, h = WeatherService.get_weather(s['start_latlng'][0], s['start_latlng'][1], dt.strftime("%Y-%m-%d"), dt.hour)
 
                         m = RunMetrics(s.get('average_watts', 0), s.get('average_heartrate', 0), s.get('distance', 0), s.get('moving_time', 0), s.get('total_elevation_gain', 0), weight, hr_max, hr_rest, t, h)
                         dec = eng.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
                         
-                        # CALCOLO 4.1
                         score, details, wcf, wr_pct = eng.compute_score(m, dec)
                         rnk, _ = eng.get_rank(score)
                         
@@ -265,7 +261,7 @@ else:
                 
                 if count_new > 0:
                     st.success(f"Archiviate {count_new} nuove attività!")
-                    st.session_state.data = db_svc.get_history() # Ricarica DB
+                    st.session_state.data = db_svc.get_history()
                     time.sleep(1)
                     st.rerun()
                 elif len(activities_list) > 0 and count_new == 0:
@@ -273,19 +269,28 @@ else:
             else:
                 st.warning("Nessuna corsa trovata.")
 
-    # --- VISUALIZZAZIONE DASHBOARD (Il ritorno del layout PRO) ---
+    # --- VISUALIZZAZIONE DASHBOARD (FIX TIMEZONE QUI) ---
     if st.session_state.data:
         st.markdown("<br>", unsafe_allow_html=True)
         t1, t2 = st.tabs(["📊 Dashboard Pro", "🔬 Laboratorio Analisi"])
         
         df = pd.DataFrame(st.session_state.data)
-        df['Data'] = pd.to_datetime(df['Data'])
+        
+        # --- FIX IMPORTANTE PER DATETIME ---
+        # 1. Convertiamo in datetime, gestendo errori
+        df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
+        
+        # 2. Rimuoviamo il fuso orario (timezone naive) per poterlo confrontare con datetime.now()
+        if pd.api.types.is_datetime64_any_dtype(df['Data']):
+             if df['Data'].dt.tz is not None:
+                 df['Data'] = df['Data'].dt.tz_localize(None)
+
         df = df.sort_values("Data", ascending=True)
         df["SCORE_MA_7"] = df["SCORE"].rolling(7, min_periods=1).mean()
         df["SCORE_MA_28"] = df["SCORE"].rolling(28, min_periods=1).mean()
         df = df.sort_values("Data", ascending=False)
         
-        # Filtro Data
+        # Filtro Data (Ora Funziona Sicuro)
         if 'days_to_fetch' in locals():
             cutoff = datetime.now() - timedelta(days=days_to_fetch)
             df = df[df['Data'] > cutoff]
@@ -297,7 +302,6 @@ else:
             cur_score = cur_run['SCORE']
             cur_ma7 = cur_run['SCORE_MA_7']
             
-            # Trend Check
             if len(df) > 1:
                 prev_ma7 = df.iloc[1]['SCORE_MA_7']
                 delta_val = cur_ma7 - prev_ma7
@@ -314,7 +318,6 @@ else:
 
             # === TAB 1: DASHBOARD ===
             with t1:
-                # HERO SECTION (I 3 Cerchi)
                 c_prev, c_main, c_next = st.columns([1, 1.5, 1], gap="small")
                 
                 with c_prev:
@@ -322,7 +325,6 @@ else:
                 
                 with c_main:
                     clean_rank = cur_run['Rank'].split('/')[0].strip()
-                    # HTML PER IL CERCHIO SCORE
                     st.markdown(f"""
                     <div style="display: flex; justify-content: center;">
                         <div style="width: 170px; height: 170px; border-radius: 50%; border: 6px solid #CDFAD5; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
@@ -337,22 +339,18 @@ else:
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # KPI ROW
                 k1, k2, k3, k4, k5 = st.columns(5)
                 with k1: st.metric("Efficienza", f"{cur_run['Decoupling']}%", "Drift")
                 with k2: st.metric("Potenza", f"{cur_run['Power']}w", f"{cur_run['Meteo']}")
-                # Qui visualizziamo i nuovi dati WCF/WR
                 with k3: st.metric("Benchmark", f"{cur_run.get('WR_Pct', 0)}%", "vs World Rec")
                 with k4: st.metric("WCF Meteo", f"{cur_run.get('WCF', 1.0)}", "Factor")
                 with k5: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # BREAKDOWN EXPANDER
                 with st.expander("🔍 Perché questo punteggio? (Breakdown)", expanded=True):
                     details = cur_run.get("SCORE_DETAIL")
                     if not details or not isinstance(details, dict):
-                         # Fallback rapido se manca il dettaglio salvato
                          m_tmp = RunMetrics(cur_run['Power'], cur_run['HR'], cur_run['Dist (km)']*1000, 0, 0, weight, hr_max, hr_rest, 20, 50)
                          _, details, _, _ = eng.compute_score(m_tmp, cur_run['Decoupling']/100)
                     
@@ -405,7 +403,7 @@ else:
                     zones_c = ScoreEngine().calculate_zones(run.get('raw_watts', []), ftp)
                     render_zones_chart(zones_c)
             
-            # FOOTER FEEDBACK
+            # FOOTER
             st.markdown("<br>", unsafe_allow_html=True)
             u_id = ath.get("id")
             u_name = f"{ath.get('firstname', '')} {ath.get('lastname', '')}"
