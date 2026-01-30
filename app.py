@@ -50,7 +50,8 @@ if "code" in st.query_params and not st.session_state.strava_token:
 # --- 6. HEADER & PROFILE ---
 col_head, col_prof = st.columns([3, 1], gap="large")
 with col_head: 
-    st.title(Config.APP_TITLE)
+    st.image("sCore.png", width=350) 
+    
     if st.session_state.demo_mode:
         st.caption("🔴 DEMO MODE - Dati simulati")
 
