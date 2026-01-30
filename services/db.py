@@ -3,38 +3,18 @@ import streamlit as st
 
 class DatabaseService:
     def __init__(self, url: str, key: str):
-        # CORREZIONE 1: Usiamo self.client ovunque per coerenza
         self.client: Client = create_client(url, key)
 
-    def save_feedback(self, feedback_data):
-        """Salva il feedback utente"""
-        try:
-            self.client.table("feedback").insert(feedback_data).execute()
-            return True, None
-        except Exception as e:
-            print(f"Errore Feedback: {e}")
-            return False, str(e)
-
+    # --- GESTIONE PROFILO ---
     def save_athlete_profile(self, profile_data):
-        """
-        Salva o aggiorna (Upsert) i dati dell'atleta.
-        RITORNA DUE VALORI: (Successo, MessaggioErrore)
-        """
         try:
-            # Upsert: se l'ID esiste aggiorna, se no crea
-            data, count = self.client.table("athletes").upsert(profile_data).execute()
-            
-            # CORREZIONE 2: RITORNA UNA COPPIA (True, None)
-            # Questo soddisfa la richiesta "success, error_msg =" in app.py
+            self.client.table("athletes").upsert(profile_data).execute()
             return True, None 
-            
         except Exception as e:
             print(f"⚠️ Errore salvataggio profilo: {e}")
-            # CORREZIONE 2: RITORNA UNA COPPIA (False, Errore)
             return False, str(e)
 
     def get_athlete_profile(self, athlete_id):
-        """Recupera i dati salvati dell'atleta"""
         try:
             res = self.client.table("athletes").select("*").eq("id", athlete_id).execute()
             if res.data and len(res.data) > 0:
@@ -44,36 +24,82 @@ class DatabaseService:
             print(f"⚠️ Errore lettura profilo: {e}")
             return None
 
+    # --- GESTIONE CORSE (RUNS) ---
     def save_run(self, run_data, athlete_id):
-        """Salva una corsa nel DB"""
+        """Salva una corsa mappando i dati Python -> SQL Supabase"""
         try:
-            # Aggiungiamo l'ID atleta al record
-            run_data['athlete_id'] = athlete_id
-            
-            # Upsert diretto: Supabase cercherà di mappare le chiavi del dizionario 
-            # alle colonne della tabella. Assicurati che le colonne esistano o 
-            # che stai usando una colonna JSONB.
-            self.client.table("runs").upsert(run_data).execute()
+            # MAPPATURA: Chiavi App -> Colonne SQL
+            payload = {
+                "id": run_data['id'],
+                "athlete_id": athlete_id,
+                "date": run_data['Data'],             
+                "distance_km": run_data['Dist (km)'],
+                "duration_sec": len(run_data.get('raw_watts', [])) if run_data.get('raw_watts') else 0,
+                "avg_power": run_data['Power'],
+                "avg_hr": run_data['HR'],
+                "decoupling": run_data['Decoupling'],
+                "score": run_data['SCORE'],
+                "wcf": run_data['WCF'],       # <--- NUOVO 4.1
+                "wr_pct": run_data['WR_Pct'], # <--- NUOVO 4.1
+                "rank": run_data['Rank'],
+                "meteo_desc": run_data['Meteo'],
+                "raw_data": {
+                    "watts": run_data['raw_watts'],
+                    "hr": run_data['raw_hr'],
+                    "details": run_data.get('SCORE_DETAIL', {}) # Salviamo i dettagli nel JSON
+                }
+            }
+            self.client.table("runs").upsert(payload).execute()
             return True
         except Exception as e:
             print(f"Errore DB Save Run: {e}")
             return False
 
     def get_history(self):
-        """Scarica tutte le corse dal DB"""
+        """Carica lo storico mappando SQL Supabase -> Dati Python"""
         try:
-            # Order by Data decrescente
-            response = self.client.table("runs").select("*").order("Data", desc=True).execute()
-            return response.data if response.data else []
+            response = self.client.table("runs").select("*").order("date", desc=True).execute()
+            data = response.data if response.data else []
+            
+            processed = []
+            for row in data:
+                # Estrazione sicura dal JSON raw_data
+                raw = row.get('raw_data', {}) or {}
+                
+                # MAPPATURA INVERSA: Colonne SQL -> Chiavi App
+                processed.append({
+                    "id": row['id'],
+                    "Data": row['date'],
+                    "Dist (km)": row['distance_km'],
+                    "Power": row['avg_power'],
+                    "HR": row['avg_hr'],
+                    "Decoupling": row['decoupling'],
+                    "SCORE": row['score'],
+                    "WCF": row.get('wcf', 1.0),       # <--- Fondamentale
+                    "WR_Pct": row.get('wr_pct', 0.0), # <--- Fondamentale
+                    "Rank": row['rank'],
+                    "Meteo": row['meteo_desc'],
+                    "ai_feedback": row.get('ai_feedback'),
+                    # Dati complessi
+                    "SCORE_DETAIL": raw.get('details', {}),
+                    "raw_watts": raw.get('watts', []),
+                    "raw_hr": raw.get('hr', [])
+                })
+            return processed
         except Exception as e:
             print(f"Errore DB Get History: {e}")
             return []
 
     def update_ai_feedback(self, run_id, feedback_text):
-        """Aggiorna solo il campo feedback AI di una corsa specifica"""
         try:
             self.client.table("runs").update({"ai_feedback": feedback_text}).eq("id", run_id).execute()
             return True
         except Exception as e:
-            print(f"Errore Update AI: {e}")
             return False
+    
+    def save_feedback(self, feedback_data):
+        try:
+            self.client.table("feedback").insert(feedback_data).execute()
+            return True, None
+        except Exception as e:
+            return False, str(e)
