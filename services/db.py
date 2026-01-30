@@ -1,10 +1,27 @@
-import streamlit as st
 from supabase import create_client, Client
+import streamlit as st
 
 class DatabaseService:
-    def __init__(self, url, key):
-        self.supabase: Client = create_client(url, key)
-        # ... codice esistente ...
+    def __init__(self, url: str, key: str):
+        # Usiamo self.client per coerenza con il resto del codice
+        self.client: Client = create_client(url, key)
+
+    def save_athlete_profile(self, profile_data):
+        """
+        Salva o aggiorna (Upsert) i dati dell'atleta.
+        RITORNA DUE VALORI: (Successo, MessaggioErrore)
+        """
+        try:
+            # Upsert: se l'ID esiste aggiorna, se no crea
+            data, count = self.client.table("athletes").upsert(profile_data).execute()
+            
+            # ✅ RITORNA COPPIA: (True, None)
+            return True, None 
+            
+        except Exception as e:
+            print(f"⚠️ Errore salvataggio profilo: {e}")
+            # ❌ RITORNA COPPIA: (False, Errore)
+            return False, str(e)
 
     def get_athlete_profile(self, athlete_id):
         """Recupera i dati salvati dell'atleta"""
@@ -17,88 +34,61 @@ class DatabaseService:
             print(f"⚠️ Errore lettura profilo: {e}")
             return None
 
-    def save_athlete_profile(self, profile_data):
-        """Salva o aggiorna (Upsert) i dati dell'atleta"""
+    def save_run(self, run_data, athlete_id):
+        """Salva una corsa nel DB"""
         try:
-            # Upsert: se l'ID esiste aggiorna, se no crea
-            self.client.table("athletes").upsert(profile_data).execute()
+            # Aggiungiamo l'ID atleta al record per associarlo
+            run_data['athlete_id'] = athlete_id
+            
+            # Upsert diretto del dizionario run_data (che deve corrispondere alle colonne DB)
+            # Se la tua tabella su Supabase usa nomi diversi (es. snake_case),
+            # Supabase è intelligente abbastanza da mappare se i nomi coincidono,
+            # ma per sicurezza qui usiamo il payload diretto che abbiamo creato in app.py
+            
+            # Nota: In app.py stiamo creando un oggetto "run_obj" con chiavi come "Dist (km)".
+            # Se su Supabase hai colonne chiamate "distance_km", dobbiamo mapparle.
+            # Per semplicità, in questa versione assumiamo che tu abbia creato la tabella
+            # o che usiamo JSONB. Ma per far funzionare tutto SUBITO, usiamo la mappatura:
+            
+            payload = {
+                "id": run_data['id'],
+                "athlete_id": athlete_id,
+                "Data": run_data['Data'],             # Assicurati che la colonna Supabase sia "Data" o mappala
+                "Dist (km)": run_data['Dist (km)'],
+                "Power": run_data['Power'],
+                "HR": run_data['HR'],
+                "Decoupling": run_data['Decoupling'],
+                "WCF": run_data['WCF'],
+                "SCORE": run_data['SCORE'],
+                "WR_Pct": run_data['WR_Pct'],
+                "Rank": run_data['Rank'],
+                "Meteo": run_data['Meteo'],
+                "SCORE_DETAIL": run_data['SCORE_DETAIL'],
+                "raw_watts": run_data['raw_watts'],
+                "raw_hr": run_data['raw_hr']
+            }
+
+            self.client.table("runs").upsert(payload).execute()
             return True
         except Exception as e:
-            print(f"⚠️ Errore salvataggio profilo: {e}")
+            # Se fallisce per nomi colonne errati, stampiamo l'errore
+            print(f"Errore DB Save Run: {e}")
             return False
 
+    def get_history(self):
+        """Scarica tutte le corse dal DB"""
+        try:
+            response = self.client.table("runs").select("*").order("Data", desc=True).execute()
+            return response.data if response.data else []
+        except Exception as e:
+            print(f"Errore DB Get History: {e}")
+            return []
+
     def update_ai_feedback(self, run_id, feedback_text):
-        """Salva il commento dell'AI nel DB per non rigenerarlo."""
+        """Aggiorna solo il campo feedback AI"""
         try:
             self.client.table("runs").update({"ai_feedback": feedback_text}).eq("id", run_id).execute()
             return True
         except Exception as e:
-            print(f"Errore update AI: {e}")
+            print(f"Errore Update AI: {e}")
             return False
-
-    def save_run(self, run_data, athlete_id):
-        """Salva o aggiorna una corsa nel DB (Upsert)"""
-        # Prepariamo il payload per Supabase
-        payload = {
-            "id": run_data['id'],
-            "athlete_id": athlete_id,
-            "date": run_data['Data'],
-            "distance_km": run_data['Dist (km)'],
-            "duration_sec": len(run_data['raw_watts']), # Stima approx
-            "avg_power": run_data['Power'],
-            "avg_hr": run_data['HR'],
-            "decoupling": run_data['Decoupling'],
-            "score": run_data['SCORE'],
-            "wcf": run_data['WCF'],
-            "wr_pct": run_data['WR_Pct'],
-            "rank": run_data['Rank'],
-            "meteo_desc": run_data['Meteo'],
-            # Serializziamo i dati grezzi in JSON
-            "raw_data": {
-                "watts": run_data['raw_watts'],
-                "hr": run_data['raw_hr']
-            }
-        }
-        
-        try:
-            # upsert = insert or update se l'ID esiste già
-            self.supabase.table("runs").upsert(payload).execute()
-            return True
-        except Exception as e:
-            st.error(f"Errore DB Save: {e}")
-            return False
-
-    def get_history(self, athlete_id=None, limit=50):
-        """Carica lo storico dal DB"""
-        try:
-            query = self.supabase.table("runs").select("*").order("date", desc=True).limit(limit)
-            
-            # Se volessimo filtrare per atleta (futuro)
-            # if athlete_id: query = query.eq("athlete_id", athlete_id)
-            
-            response = query.execute()
-            data = response.data
-            
-            # Riconvertiamo il formato DB nel formato App
-            processed = []
-            for row in data:
-                processed.append({
-                    "id": row['id'],
-                    "Data": row['date'],
-                    "Dist (km)": row['distance_km'],
-                    "Power": row['avg_power'],
-                    "HR": row['avg_hr'],
-                    "Decoupling": row['decoupling'],
-                    "WCF": row['wcf'],
-                    "SCORE": row['score'],
-                    "WR_Pct": row['wr_pct'],
-                    "Rank": row['rank'],
-                    "Meteo": row['meteo_desc'],
-                    # Estraiamo i dati grezzi dal JSONB
-                    "raw_watts": row['raw_data']['watts'],
-                    "raw_hr": row['raw_data']['hr']
-                })
-            return processed
-        except Exception as e:
-            st.error(f"Errore DB Load: {e}")
-            return []
