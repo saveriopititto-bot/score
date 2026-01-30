@@ -207,7 +207,7 @@ else:
             days_to_fetch = time_options[selected_label]
 
         with c_btn:
-            start_sync = st.button("🔄 Sync", type="primary", use_container_width=True, disabled=st.session_state.demo_mode)
+            start_sync = st.button("🔄AGGIORNA", type="primary", use_container_width=True, disabled=st.session_state.demo_mode)
 
     # --- 9. ENGINE DI SINCRONIZZAZIONE ---
     if start_sync and not st.session_state.demo_mode:
