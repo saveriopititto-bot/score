@@ -6,6 +6,15 @@ class DatabaseService:
         # CORREZIONE 1: Usiamo self.client ovunque per coerenza
         self.client: Client = create_client(url, key)
 
+    def save_feedback(self, feedback_data):
+        """Salva il feedback utente"""
+        try:
+            self.client.table("feedback").insert(feedback_data).execute()
+            return True, None
+        except Exception as e:
+            print(f"Errore Feedback: {e}")
+            return False, str(e)
+
     def save_athlete_profile(self, profile_data):
         """
         Salva o aggiorna (Upsert) i dati dell'atleta.
