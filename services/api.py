@@ -98,7 +98,9 @@ class StravaService:
         self.base_url = "https://www.strava.com/api/v3"
     
     def get_link(self, redirect_uri):
-        return f"https://www.strava.com/oauth/authorize?client_id={self.client_id}&response_type=code&redirect_uri={redirect_uri}&approval_prompt=force&scope=activity:read_all"
+        # NOTA: Aggiunto 'profile:read_all' per leggere Peso e Zone Cardiache
+        scope = "activity:read_all,profile:read_all"
+        return f"https://www.strava.com/oauth/authorize?client_id={self.client_id}&response_type=code&redirect_uri={redirect_uri}&approval_prompt=force&scope={scope}"
 
     def get_token(self, code):
         try:
@@ -164,4 +166,11 @@ class StravaService:
     def fetch_streams(self, token, activity_id):
         headers = {"Authorization": f"Bearer {token}"}
         url = f"{self.base_url}/activities/{activity_id}/streams?keys=watts,heartrate&key_by_type=true"
+        return self._request_with_retry("GET", url, headers=headers)
+
+    # --- NUOVO METODO AGGIUNTO ---
+    def fetch_zones(self, token):
+        """Scarica le zone cardiache dell'atleta per trovare la FC Max reale"""
+        headers = {"Authorization": f"Bearer {token}"}
+        url = f"{self.base_url}/athlete/zones"
         return self._request_with_retry("GET", url, headers=headers)
