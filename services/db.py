@@ -4,6 +4,28 @@ from supabase import create_client, Client
 class DatabaseService:
     def __init__(self, url, key):
         self.supabase: Client = create_client(url, key)
+        # ... codice esistente ...
+
+    def get_athlete_profile(self, athlete_id):
+        """Recupera i dati salvati dell'atleta"""
+        try:
+            res = self.client.table("athletes").select("*").eq("id", athlete_id).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]
+            return None
+        except Exception as e:
+            print(f"⚠️ Errore lettura profilo: {e}")
+            return None
+
+    def save_athlete_profile(self, profile_data):
+        """Salva o aggiorna (Upsert) i dati dell'atleta"""
+        try:
+            # Upsert: se l'ID esiste aggiorna, se no crea
+            self.client.table("athletes").upsert(profile_data).execute()
+            return True
+        except Exception as e:
+            print(f"⚠️ Errore salvataggio profilo: {e}")
+            return False
 
     def update_ai_feedback(self, run_id, feedback_text):
         """Salva il commento dell'AI nel DB per non rigenerarlo."""
