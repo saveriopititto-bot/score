@@ -142,60 +142,102 @@ else:
                 del st.session_state.strava_zones
             st.rerun()
 
-    # --- 7. CONFIGURAZIONE ATLETA (Auto-Sync) ---
-    weight = Config.DEFAULT_WEIGHT
-    hr_max = Config.DEFAULT_HR_MAX
-    hr_rest = Config.DEFAULT_HR_REST
-    ftp = Config.DEFAULT_FTP
-    age = Config.DEFAULT_AGE
+    # --- 7. CONFIGURAZIONE ATLETA (Smart Sync: DB + Strava) ---
+    # Inizializziamo variabili con i default
+    weight, hr_max, hr_rest, ftp, age = Config.DEFAULT_WEIGHT, Config.DEFAULT_HR_MAX, Config.DEFAULT_HR_REST, Config.DEFAULT_FTP, Config.DEFAULT_AGE
     zones_data = None
-
-    # Recupero dati da Strava Token
+    
     if not st.session_state.demo_mode:
         token = st.session_state.strava_token["access_token"]
+        athlete_id = ath.get("id")
         
-        # 1. Dati Base (Peso, FTP)
-        strava_weight = ath.get('weight', 0)
-        if strava_weight: weight = float(strava_weight)
+        # 1. CERCHIAMO PRIMA NEL DATABASE (Dati salvati dall'utente)
+        saved_profile = db_svc.get_athlete_profile(athlete_id)
         
-        strava_ftp = ath.get('ftp', 0)
-        if strava_ftp: ftp = int(strava_ftp)
+        if saved_profile:
+            # Se abbiamo dati salvati, usiamo quelli come base
+            weight = saved_profile.get('weight', weight)
+            hr_max = saved_profile.get('hr_max', hr_max)
+            hr_rest = saved_profile.get('hr_rest', hr_rest)
+            ftp = saved_profile.get('ftp', ftp)
+            age = saved_profile.get('age', age)
         
-        # Tentativo Età da birthdate
-        birthdate = ath.get('birthdate')
-        if birthdate:
-            try:
-                b_year = int(birthdate.split("-")[0])
-                age = datetime.now().year - b_year
-            except: pass
+        else:
+            # 2. SE È LA PRIMA VOLTA, USIAMO STRAVA
+            # Peso da Strava
+            s_weight = ath.get('weight', 0)
+            if s_weight: weight = float(s_weight)
+            
+            # FTP da Strava
+            s_ftp = ath.get('ftp', 0)
+            if s_ftp: ftp = int(s_ftp)
+            
+            # Età da Strava
+            birthdate = ath.get('birthdate')
+            if birthdate:
+                try:
+                    b_year = int(birthdate.split("-")[0])
+                    age = datetime.now().year - b_year
+                except: pass
 
-        # 2. Recupero Avanzato (FC Max da Zone) - Cachato
-        if "strava_zones" not in st.session_state:
-            with st.spinner("Sync dati biometrici..."):
+            # FC Max da Zone Strava
+            if "strava_zones" not in st.session_state:
                 st.session_state.strava_zones = auth_svc.fetch_zones(token)
-        
-        zones_data = st.session_state.strava_zones
-        
-        if zones_data:
-            hr_zones = zones_data.get("heart_rate", {}).get("zones", [])
-            if hr_zones:
-                extracted_max = hr_zones[-1].get("max")
-                if extracted_max: hr_max = int(extracted_max)
+            
+            zones_data = st.session_state.strava_zones
+            if zones_data:
+                hr_zones = zones_data.get("heart_rate", {}).get("zones", [])
+                if hr_zones:
+                    extracted_max = hr_zones[-1].get("max")
+                    if extracted_max: hr_max = int(extracted_max)
 
-    # UI Profilo
+    # UI Profilo (Form)
     with st.expander("⚙️ Profilo Atleta & Parametri Fisici", expanded=False):
-        c1, c2, c3, c4, c5 = st.columns(5)
-        with c1: weight = st.number_input("Peso (kg)", value=float(weight), step=0.5, help="Da Strava")
-        with c2: hr_max = st.number_input("FC Max", value=int(hr_max), help="Da Strava (Zone)")
-        with c3: hr_rest = st.number_input("FC Riposo", value=int(hr_rest))
-        with c4: ftp = st.number_input("FTP (W)", value=int(ftp))
-        with c5: age = st.number_input("Età", value=int(age), help="Per calcolo percentile")
-        
-        if zones_data:
-            st.caption(f"✅ Sync Strava attivo: Peso {weight}kg, FC Max {hr_max}bpm.")
+        # Usiamo st.form per salvare tutto in un colpo solo
+        with st.form("athlete_settings"):
+            c1, c2, c3, c4, c5 = st.columns(5)
+            with c1: 
+                new_weight = st.number_input("Peso (kg)", value=float(weight), step=0.5)
+            with c2: 
+                new_hr_max = st.number_input("FC Max", value=int(hr_max))
+            with c3: 
+                new_hr_rest = st.number_input("FC Riposo", value=int(hr_rest), help="Fondamentale per calcolo riserva")
+            with c4: 
+                new_ftp = st.number_input("FTP (W)", value=int(ftp))
+            with c5: 
+                new_age = st.number_input("Età", value=int(age))
+                
+            save_btn = st.form_submit_button("💾 Salva Profilo")
+            
+            if save_btn and not st.session_state.demo_mode:
+                # Aggiorniamo le variabili locali subito
+                weight, hr_max, hr_rest, ftp, age = new_weight, new_hr_max, new_hr_rest, new_ftp, new_age
+                
+                # Salviamo su Supabase
+                profile_payload = {
+                    "id": ath.get("id"),
+                    "firstname": ath.get("firstname"),
+                    "lastname": ath.get("lastname"),
+                    "weight": new_weight,
+                    "hr_max": new_hr_max,
+                    "hr_rest": new_hr_rest,
+                    "ftp": new_ftp,
+                    "age": new_age,
+                    "updated_at": datetime.now().isoformat()
+                }
+                if db_svc.save_athlete_profile(profile_payload):
+                    st.success("Profilo aggiornato e salvato!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("Errore nel salvataggio.")
 
-    st.divider()
+        if zones_data and not saved_profile:
+            st.caption("ℹ️ Dati iniziali sincronizzati da Strava. Clicca 'Salva' per memorizzarli.")
+        elif saved_profile:
+            st.caption("✅ Profilo caricato dal database.")
 
+    
     # --- 8. TOOLBAR CENTRALE (Filtri e Sync) ---
     space_L, col_controls, space_R = st.columns([3, 2, 3])
     with col_controls:
