@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
 import time
-import concurrent.futures
 from datetime import datetime, timedelta
 
 # --- 1. CONFIG & VALIDATION (PRIMA DI TUTTO) ---
 from config import Config
 
-# Check iniziale dei segreti per evitare crash brutti
+# Check iniziale dei segreti per evitare crash
 missing_secrets = Config.check_secrets()
 if missing_secrets:
     st.error(f"❌ Segreti mancanti: {', '.join(missing_secrets)}. Controlla `.streamlit/secrets.toml`.")
@@ -19,6 +18,7 @@ from services.api import StravaService, WeatherService, AICoachService
 from services.db import DatabaseService
 from ui.visuals import render_benchmark_chart, render_zones_chart, render_scatter_chart, render_history_table, render_trend_chart
 from ui.style import apply_custom_style
+from ui.legal import render_legal_section  # Importiamo il footer legale
 
 # --- 3. PAGE SETUP ---
 st.set_page_config(
@@ -27,6 +27,8 @@ st.set_page_config(
     layout="wide", 
     initial_sidebar_state="collapsed"
 )
+
+# Applica lo stile (Montserrat, Box Compatti, Colori #FFCF96)
 apply_custom_style()
 
 # --- 4. INIZIALIZZAZIONE SERVIZI ---
@@ -71,7 +73,8 @@ if not st.session_state.strava_token:
         try:
             st.image("sCore.png", use_container_width=True)
         except:
-            st.title("sCore Lab") # Fallback testuale se manca l'immagine
+            # Fallback se l'immagine non c'è ancora
+            st.markdown("<h1 style='text-align: center; color: #FFCF96;'>sCore Lab</h1>", unsafe_allow_html=True)
         
         # 2. SLOGAN
         st.markdown("""
@@ -85,9 +88,8 @@ if not st.session_state.strava_token:
         """, unsafe_allow_html=True)
         
         # 3. BOTTONI AZIONE
-        redirect_url = "https://scorerun.streamlit.app/" # URL di produzione
-        # Se sei in locale, usa: "http://localhost:8501/"
-        
+        # Sostituisci con il tuo URL finale quando pubblichi
+        redirect_url = "https://scorerun.streamlit.app/" 
         link_strava = auth_svc.get_link(redirect_url)
         
         col_b1, col_b2 = st.columns([1, 1], gap="small")
@@ -102,6 +104,10 @@ if not st.session_state.strava_token:
                     "athlete": {"id": 12345, "firstname": "Mario", "lastname": "Rossi", "weight": 70.0}
                 }
                 st.rerun()
+
+        # 4. FOOTER LEGALE (Expander discreto)
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        render_legal_section()
 
 # --- CASO B: UTENTE LOGGATO (Dashboard) ---
 else:
@@ -131,11 +137,12 @@ else:
         if st.button("Esci / Logout", key="logout_btn", use_container_width=True):
             st.session_state.strava_token = None
             st.session_state.demo_mode = False
-            st.session_state.pop("strava_zones", None) # Pulisce cache zone
+            # Pulizia cache zone
+            if "strava_zones" in st.session_state:
+                del st.session_state.strava_zones
             st.rerun()
 
     # --- 7. CONFIGURAZIONE ATLETA (Auto-Sync) ---
-    # Valori Default
     weight = Config.DEFAULT_WEIGHT
     hr_max = Config.DEFAULT_HR_MAX
     hr_rest = Config.DEFAULT_HR_REST
