@@ -3,10 +3,10 @@ import pandas as pd
 import time
 from datetime import datetime, timedelta
 
-# --- 1. CONFIG & VALIDATION (PRIMA DI TUTTO) ---
+# --- 1. CONFIG & VALIDATION ---
 from config import Config
 
-# Check iniziale dei segreti per evitare crash
+# Check iniziale dei segreti
 missing_secrets = Config.check_secrets()
 if missing_secrets:
     st.error(f"❌ Segreti mancanti: {', '.join(missing_secrets)}. Controlla `.streamlit/secrets.toml`.")
@@ -18,7 +18,7 @@ from services.api import StravaService, WeatherService, AICoachService
 from services.db import DatabaseService
 from ui.visuals import render_benchmark_chart, render_zones_chart, render_scatter_chart, render_history_table, render_trend_chart
 from ui.style import apply_custom_style
-from ui.legal import render_legal_section  # Importiamo il footer legale
+from ui.legal import render_legal_section
 
 # --- 3. PAGE SETUP ---
 st.set_page_config(
@@ -28,7 +28,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Applica lo stile (Montserrat, Box Compatti, Colori #FFCF96)
 apply_custom_style()
 
 # --- 4. INIZIALIZZAZIONE SERVIZI ---
@@ -47,7 +46,7 @@ if "data" not in st.session_state:
 if "demo_mode" not in st.session_state:
     st.session_state.demo_mode = False
 
-# Callback Strava (Codice -> Token)
+# Callback Strava
 if "code" in st.query_params and not st.session_state.strava_token:
     tk = auth_svc.get_token(st.query_params["code"])
     if tk: 
@@ -59,24 +58,17 @@ if "code" in st.query_params and not st.session_state.strava_token:
 # LOGICA PRINCIPALE
 # =========================================================
 
-# --- CASO A: UTENTE NON LOGGATO (Landing Page Centrata) ---
+# --- CASO A: LANDING PAGE (Non Loggato) ---
 if not st.session_state.strava_token:
-    
-    # Spaziatura verticale per centrare visivamente
     st.markdown("<br><br>", unsafe_allow_html=True)
-    
-    # Layout a 3 colonne per centrare il contenuto
     c_left, c_center, c_right = st.columns([1, 2, 1])
     
     with c_center:
-        # 1. LOGO GRANDE
         try:
             st.image("sCore.png", use_container_width=True)
         except:
-            # Fallback se l'immagine non c'è ancora
             st.markdown("<h1 style='text-align: center; color: #FFCF96;'>sCore Lab</h1>", unsafe_allow_html=True)
         
-        # 2. SLOGAN
         st.markdown("""
         <div style="text-align: center; margin-top: -10px; margin-bottom: 30px;">
             <h3 style="color: #6C5DD3; font-weight: 800; letter-spacing: -0.5px;">Corri. Analizza. Evolvi.</h3>
@@ -87,8 +79,7 @@ if not st.session_state.strava_token:
         </div>
         """, unsafe_allow_html=True)
         
-        # 3. BOTTONI AZIONE
-        # Sostituisci con il tuo URL finale quando pubblichi
+        # URL di produzione (aggiorna con il tuo link finale)
         redirect_url = "https://scorerun.streamlit.app/" 
         link_strava = auth_svc.get_link(redirect_url)
         
@@ -98,30 +89,26 @@ if not st.session_state.strava_token:
         with col_b2:
             if st.button("👀 Demo Mode", use_container_width=True):
                 st.session_state.demo_mode = True
-                # Mock token per la demo
                 st.session_state.strava_token = {
-                    "access_token": "DEMO_TOKEN", 
-                    "athlete": {"id": 12345, "firstname": "Mario", "lastname": "Rossi", "weight": 70.0}
+                    "access_token": "DEMO", 
+                    "athlete": {"id": 123, "firstname": "Demo", "lastname": "User", "weight": 70.0}
                 }
                 st.rerun()
 
-        # 4. FOOTER LEGALE (Expander discreto)
         st.markdown("<br><br>", unsafe_allow_html=True)
         render_legal_section()
 
-# --- CASO B: UTENTE LOGGATO (Dashboard) ---
+# --- CASO B: DASHBOARD (Loggato) ---
 else:
-    # --- 6. HEADER & PROFILE ---
+    # 6. HEADER & PROFILE
     col_header, col_profile = st.columns([3, 1], gap="large")
     with col_header:
-        # Logo piccolo per l'intestazione
         try:
             st.image("sCore.png", width=220) 
         except:
             st.title("sCore Lab")
-            
         if st.session_state.get("demo_mode"):
-            st.caption("🔴 DEMO MODE - Dati Simulati")
+            st.caption("🔴 DEMO MODE")
 
     with col_profile:
         ath = st.session_state.strava_token.get("athlete", {})
@@ -137,50 +124,50 @@ else:
         if st.button("Esci / Logout", key="logout_btn", use_container_width=True):
             st.session_state.strava_token = None
             st.session_state.demo_mode = False
-            # Pulizia cache zone
-            if "strava_zones" in st.session_state:
-                del st.session_state.strava_zones
+            if "strava_zones" in st.session_state: del st.session_state.strava_zones
             st.rerun()
 
-    # --- 7. CONFIGURAZIONE ATLETA (Smart Sync: DB + Strava) ---
-    # Inizializziamo variabili con i default
+    # --- DEBUG TOOL (Per vedere cosa invia Strava) ---
+    # Utile per capire se FTP/HR mancano dalla fonte
+    with st.expander("🕵️‍♂️ Debug Dati Strava (Solo per sviluppatore)", expanded=False):
+        st.write("Dati Profilo ricevuti:", ath)
+        if "strava_zones" in st.session_state:
+            st.write("Dati Zone ricevuti:", st.session_state.strava_zones)
+        else:
+            st.write("Nessuna zona scaricata ancora.")
+
+    # --- 7. CONFIGURAZIONE ATLETA (Smart Sync) ---
     weight, hr_max, hr_rest, ftp, age = Config.DEFAULT_WEIGHT, Config.DEFAULT_HR_MAX, Config.DEFAULT_HR_REST, Config.DEFAULT_FTP, Config.DEFAULT_AGE
     zones_data = None
-    
+    saved_profile = None
+
     if not st.session_state.demo_mode:
         token = st.session_state.strava_token["access_token"]
         athlete_id = ath.get("id")
         
-        # 1. CERCHIAMO PRIMA NEL DATABASE (Dati salvati dall'utente)
+        # A. Tentativo DB (Priorità Massima)
         saved_profile = db_svc.get_athlete_profile(athlete_id)
         
         if saved_profile:
-            # Se abbiamo dati salvati, usiamo quelli come base sovrascrivendo i default
             weight = saved_profile.get('weight', weight)
             hr_max = saved_profile.get('hr_max', hr_max)
             hr_rest = saved_profile.get('hr_rest', hr_rest)
             ftp = saved_profile.get('ftp', ftp)
             age = saved_profile.get('age', age)
-        
         else:
-            # 2. SE È LA PRIMA VOLTA, USIAMO STRAVA
-            # Peso da Strava
+            # B. Tentativo Strava (Solo se DB vuoto)
             s_weight = ath.get('weight', 0)
             if s_weight: weight = float(s_weight)
             
-            # FTP da Strava
             s_ftp = ath.get('ftp', 0)
             if s_ftp: ftp = int(s_ftp)
             
-            # Età da Strava
             birthdate = ath.get('birthdate')
             if birthdate:
                 try:
-                    b_year = int(birthdate.split("-")[0])
-                    age = datetime.now().year - b_year
+                    age = datetime.now().year - int(birthdate.split("-")[0])
                 except: pass
 
-            # FC Max da Zone Strava
             if "strava_zones" not in st.session_state:
                 st.session_state.strava_zones = auth_svc.fetch_zones(token)
             
@@ -191,118 +178,97 @@ else:
                     extracted_max = hr_zones[-1].get("max")
                     if extracted_max: hr_max = int(extracted_max)
 
-    # UI Profilo (Form)
+    # Form Settings
     with st.expander("⚙️ Profilo Atleta & Parametri Fisici", expanded=False):
-        # Usiamo st.form per salvare tutto in un colpo solo ed evitare ricaricamenti continui
         with st.form("athlete_settings"):
             c1, c2, c3, c4, c5 = st.columns(5)
-            with c1: 
-                new_weight = st.number_input("Peso (kg)", value=float(weight), step=0.5)
-            with c2: 
-                new_hr_max = st.number_input("FC Max", value=int(hr_max))
-            with c3: 
-                new_hr_rest = st.number_input("FC Riposo", value=int(hr_rest), help="Fondamentale per calcolo riserva")
-            with c4: 
-                new_ftp = st.number_input("FTP (W)", value=int(ftp))
-            with c5: 
-                new_age = st.number_input("Età", value=int(age))
-                
+            with c1: new_weight = st.number_input("Peso (kg)", value=float(weight), step=0.5)
+            with c2: new_hr_max = st.number_input("FC Max", value=int(hr_max))
+            with c3: new_hr_rest = st.number_input("FC Riposo", value=int(hr_rest), help="Inserisci manualmente")
+            with c4: new_ftp = st.number_input("FTP (W)", value=int(ftp))
+            with c5: new_age = st.number_input("Età", value=int(age))
+            
             save_btn = st.form_submit_button("💾 Salva Profilo")
             
             if save_btn and not st.session_state.demo_mode:
-                # 3. SALVATAGGIO ROBUSTO (Type Casting)
                 athlete_id = ath.get("id")
                 if not athlete_id:
-                    st.error("❌ Errore critico: ID Atleta non trovato nel token.")
-                    st.stop()
-
-                # Creiamo il payload forzando i tipi corretti per Supabase
-                profile_payload = {
-                    "id": int(athlete_id),             # Forza intero (bigint)
-                    "firstname": str(ath.get("firstname", "")),
-                    "lastname": str(ath.get("lastname", "")),
-                    "weight": float(new_weight),       # Forza float (numeric)
-                    "hr_max": int(new_hr_max),         # Forza int
-                    "hr_rest": int(new_hr_rest),       # Forza int
-                    "ftp": int(new_ftp),               # Forza int
-                    "age": int(new_age),               # Forza int
-                    "updated_at": datetime.now().isoformat()
-                }
-                
-                # Chiamata al servizio DB
-                if db_svc.save_athlete_profile(profile_payload):
-                    # Aggiorniamo le variabili locali per vederle subito corrette
-                    weight, hr_max, hr_rest, ftp, age = new_weight, new_hr_max, new_hr_rest, new_ftp, new_age
-                    st.success("✅ Profilo aggiornato e salvato!")
-                    time.sleep(1)
-                    st.rerun()
+                    st.error("❌ ID Atleta mancante.")
                 else:
-                    st.error("❌ Errore nel salvataggio su database. Controlla la console.")
+                    # Payload con Type Casting forzato
+                    profile_payload = {
+                        "id": int(athlete_id),
+                        "firstname": str(ath.get("firstname", "")),
+                        "lastname": str(ath.get("lastname", "")),
+                        "weight": float(new_weight),
+                        "hr_max": int(new_hr_max),
+                        "hr_rest": int(new_hr_rest),
+                        "ftp": int(new_ftp),
+                        "age": int(new_age),
+                        "updated_at": datetime.now().isoformat()
+                    }
+                    
+                    if db_svc.save_athlete_profile(profile_payload):
+                        st.success("✅ Profilo salvato con successo!")
+                        # Aggiorniamo le variabili locali per l'engine
+                        weight, hr_max, hr_rest, ftp, age = new_weight, new_hr_max, new_hr_rest, new_ftp, new_age
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Errore durante il salvataggio. Verifica i permessi Supabase.")
 
-        # Feedback visivo sullo stato dei dati
         if zones_data and not saved_profile:
-            st.caption("ℹ️ Dati iniziali sincronizzati da Strava. Clicca 'Salva' per memorizzarli nel database.")
+            st.caption("ℹ️ Dati iniziali da Strava. Clicca Salva per confermare.")
         elif saved_profile:
-            st.caption("✅ Profilo caricato dal database personale.")
-    
-    # --- 8. TOOLBAR CENTRALE (Filtri e Sync) ---
+            st.caption("✅ Profilo caricato dal database.")
+
+    st.divider()
+
+    # --- 8. SYNC TOOLBAR ---
     space_L, col_controls, space_R = st.columns([3, 2, 3])
     with col_controls:
         c_drop, c_btn = st.columns([2, 1], gap="small", vertical_alignment="bottom")
-        
         with c_drop:
             time_options = {"30 Giorni": 30, "90 Giorni": 90, "12 Mesi": 365, "Storico": 3650}
             selected_label = st.selectbox("Periodo Analisi:", list(time_options.keys()), index=2)
             days_to_fetch = time_options[selected_label]
-
         with c_btn:
-            start_sync = st.button("🔄AGGIORNA", type="primary", use_container_width=True, disabled=st.session_state.demo_mode)
+            start_sync = st.button("🔄 AGGIORNA", type="primary", use_container_width=True, disabled=st.session_state.demo_mode)
 
-    # --- 9. ENGINE DI SINCRONIZZAZIONE ---
+    # --- 9. ENGINE ---
     if start_sync and not st.session_state.demo_mode:
         eng = ScoreEngine()
-        athlete_id = ath.get("id", 0)
         token = st.session_state.strava_token["access_token"]
-        
+        athlete_id = ath.get("id")
+
         with st.spinner(f"Analisi attività Strava ({selected_label})..."):
             activities_list = auth_svc.fetch_activities(token, days_back=days_to_fetch)
         
         if not activities_list:
-            st.warning("Nessuna corsa trovata nel periodo.")
+            st.warning("Nessuna corsa trovata.")
         else:
-            st.toast(f"Trovate {len(activities_list)} attività. Elaborazione in corso...")
-            
+            st.toast(f"Trovate {len(activities_list)} attività.")
             progress_bar = st.progress(0)
             status_text = st.empty()
             count_new = 0
             existing_ids = [r['id'] for r in st.session_state.data]
             
-            # Loop di elaborazione
             for i, s in enumerate(activities_list):
                 progress_bar.progress((i + 1) / len(activities_list))
+                if s['id'] in existing_ids: continue
                 
-                if s['id'] in existing_ids:
-                    time.sleep(0.001)
-                    continue
-                
-                status_text.caption(f"Analisi AI: {s['name']}")
+                status_text.caption(f"Analisi: {s['name']}")
                 streams = auth_svc.fetch_streams(token, s['id'])
                 
                 if streams and 'watts' in streams and 'heartrate' in streams:
-                    # Parsing Dati
                     dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
                     lat_lng = s.get('start_latlng', [])
-                    
-                    # Meteo Storico
                     t, h = 20.0, 50.0
                     if lat_lng:
                         t, h = WeatherService.get_weather(lat_lng[0], lat_lng[1], dt.strftime("%Y-%m-%d"), dt.hour)
 
-                    # Metriche & Engine
                     m = RunMetrics(s.get('average_watts', 0), s.get('average_heartrate', 0), s.get('distance', 0), s.get('moving_time', 0), s.get('total_elevation_gain', 0), weight, hr_max, hr_rest, t, h)
                     dec = eng.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
-                    
-                    # Calcolo Score & Dettagli
                     score, details, wcf, wr_p = eng.compute_score(m, dec)
                     rnk, _ = eng.get_rank(score)
                     
@@ -316,16 +282,11 @@ else:
                         "SCORE_DETAIL": details,
                         "raw_watts": streams['watts']['data'], "raw_hr": streams['heartrate']['data']
                     }
-                    
-                    if db_svc.save_run(run_obj, athlete_id):
-                        count_new += 1
-                
-                time.sleep(0.1) # Rispetto Rate Limit
+                    if db_svc.save_run(run_obj, athlete_id): count_new += 1
+                time.sleep(0.1)
 
             status_text.empty()
             progress_bar.empty()
-            
-            # Refresh dati
             st.session_state.data = db_svc.get_history()
             
             if count_new > 0:
@@ -336,37 +297,29 @@ else:
             else:
                 st.info("Database già aggiornato.")
 
-    # --- 10. DASHBOARD & VISUALIZZAZIONE ---
+    # --- 10. VISUALS ---
     if st.session_state.data:
         st.markdown("<br>", unsafe_allow_html=True)
         t1, t2 = st.tabs(["📊 Dashboard Pro", "🔬 Laboratorio Analisi"])
         
-        # Preparazione DataFrame
         df = pd.DataFrame(st.session_state.data)
         df['Data'] = pd.to_datetime(df['Data'])
-        
-        # 1. Ordine Cronologico per Medie Mobili
         df = df.sort_values("Data", ascending=True)
         df["SCORE_MA_7"] = df["SCORE"].rolling(7, min_periods=1).mean()
         df["SCORE_MA_28"] = df["SCORE"].rolling(28, min_periods=1).mean()
-        
-        # 2. Ordine Inverso per Visualizzazione (Dal più recente)
         df = df.sort_values("Data", ascending=False)
         
-        # 3. Filtro Temporale (Menu a tendina)
         if 'days_to_fetch' in locals():
             cutoff = datetime.now() - timedelta(days=days_to_fetch)
             df = df[df['Data'] > cutoff]
         
         if df.empty:
-            st.warning("Nessuna corsa nel periodo selezionato.")
+            st.warning("Nessuna corsa nel periodo.")
         else:
-            # Calcoli KPI
             cur_run = df.iloc[0]
             cur_score = cur_run['SCORE']
             cur_ma7 = cur_run['SCORE_MA_7']
             
-            # Trend intelligente
             if len(df) > 1:
                 prev_ma7 = df.iloc[1]['SCORE_MA_7']
                 delta_val = cur_ma7 - prev_ma7
@@ -378,18 +331,13 @@ else:
             elif delta_val < -0.005: trend_lbl, trend_col = "In Calo ↘", "inverse"
             else: trend_lbl, trend_col = "Stabile →", "off"
 
-            # Percentile Età
             eng = ScoreEngine()
             age_pct = eng.age_adjusted_percentile(cur_score, age)
 
-            # --- TAB 1: DASHBOARD ---
             with t1:
-                # HERO SECTION (3 Cerchi)
                 c_prev, c_main, c_next = st.columns([1, 1.5, 1], gap="small")
-                
                 with c_prev:
                     st.markdown(f"""<div style="text-align:center; opacity:0.6"><small>TREND IERI</small><br><h1>{round(prev_ma7, 2)}</h1></div>""", unsafe_allow_html=True)
-                
                 with c_main:
                     clean_rank = cur_run['Rank'].split('/')[0].strip()
                     st.markdown(f"""
@@ -400,16 +348,11 @@ else:
                             <div style="background:#CDFAD5; color:#4A4A4A; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; margin-top:5px;">{clean_rank}</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
-                
                 with c_next:
                      st.markdown(f"""<div style="text-align:center; opacity:0.8"><small style="color:#6C5DD3">PERCENTILE (ETÀ)</small><br><h1 style="color:#6C5DD3">{age_pct}%</h1></div>""", unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
-
-                # KPI 5 COLONNE
                 k1, k2, k3, k4, k5 = st.columns(5)
-                # (Stile gestito da apply_custom_style in ui/style.py)
-                
                 with k1: st.metric("Efficienza", f"{cur_run['Decoupling']}%", "Drift")
                 with k2: st.metric("Potenza", f"{cur_run['Power']}w", f"{cur_run['Meteo']}")
                 with k3: st.metric("Benchmark", f"{cur_run['WR_Pct']}%", "vs WR")
@@ -417,53 +360,38 @@ else:
                 with k5: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
 
                 st.markdown("<br>", unsafe_allow_html=True)
-
-                # SCORE SPIEGABILE
                 with st.expander("🔍 Perché questo punteggio? (Breakdown)", expanded=True):
-                    # Se il dettaglio esiste nel DB usalo, altrimenti ricalcola al volo
                     details = cur_run.get("SCORE_DETAIL")
                     if not details or not isinstance(details, dict):
-                         # Fallback rapido
                          m_tmp = RunMetrics(cur_run['Power'], cur_run['HR'], cur_run['Dist (km)']*1000, 0, 0, weight, hr_max, hr_rest, 20, 50)
                          _, details, _, _ = eng.compute_score(m_tmp, cur_run['Decoupling']/100)
-
                     d1, d2, d3, d4 = st.columns(4)
                     with d1: st.metric("🚀 Potenza", f"+{details.get('Potenza', 0)}")
                     with d2: st.metric("🔋 Volume", f"+{details.get('Volume', 0)}")
                     with d3: st.metric("💓 Intensità", f"+{details.get('Intensità', 0)}")
                     with d4: st.metric("📉 Efficienza", f"{details.get('Malus Efficienza', 0)}")
-                    st.caption("Nota: La somma di questi fattori costituisce il tuo Score base.")
 
-                # STORICO
                 with st.expander("📂 Archivio Attività", expanded=False):
                     render_history_table(df)
 
-            # --- TAB 2: LABORATORIO ---
             with t2:
                 st.markdown("### 🔬 Laboratorio Analisi")
-                
-                # Grafico Trend
                 if len(df) > 1:
-                    render_trend_chart(df.head(60)) # Mostriamo ultimi 60gg
+                    render_trend_chart(df.head(60))
                     st.divider()
 
-                # Selettore Attività
                 opts = {r['id']: f"{r['Data'].strftime('%Y-%m-%d')} - {r['Dist (km)']}km" for i, r in df.iterrows()}
                 sel = st.selectbox("Analizza nel dettaglio:", list(opts.keys()), format_func=lambda x: opts[x])
-                
                 run = df[df['id'] == sel].iloc[0].to_dict()
                 
                 c_ai, c_ch = st.columns([1, 2], gap="medium")
-                
                 with c_ai:
                     st.markdown("##### 🤖 Coach AI")
                     existing_feedback = run.get('ai_feedback')
-                    
                     if existing_feedback:
                         st.success("Analisi recuperata")
                         st.markdown(existing_feedback)
-                        if st.button("🔄 Rigenera"): # Reset feedback locale
-                            pass # Richiederà ricaricamento pagina reale per ora
+                        if st.button("🔄 Rigenera"): pass 
                     else:
                         if gemini_key:
                             if st.button("✨ Genera Analisi AI", type="primary"):
@@ -476,12 +404,10 @@ else:
                                         db_svc.update_ai_feedback(run['id'], feedback)
                         else:
                             st.info("AI Key non configurata.")
-
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.metric("Disaccoppiamento (Drift)", f"{run['Decoupling']}%")
 
                 with c_ch:
-                    # Grafici Dettaglio
                     render_scatter_chart(run.get('raw_watts', []), run.get('raw_hr', []))
                     st.markdown("<br>", unsafe_allow_html=True)
                     zones_c = ScoreEngine().calculate_zones(run.get('raw_watts', []), ftp)
