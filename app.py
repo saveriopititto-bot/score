@@ -155,7 +155,7 @@ else:
         saved_profile = db_svc.get_athlete_profile(athlete_id)
         
         if saved_profile:
-            # Se abbiamo dati salvati, usiamo quelli come base
+            # Se abbiamo dati salvati, usiamo quelli come base sovrascrivendo i default
             weight = saved_profile.get('weight', weight)
             hr_max = saved_profile.get('hr_max', hr_max)
             hr_rest = saved_profile.get('hr_rest', hr_rest)
@@ -193,7 +193,7 @@ else:
 
     # UI Profilo (Form)
     with st.expander("⚙️ Profilo Atleta & Parametri Fisici", expanded=False):
-        # Usiamo st.form per salvare tutto in un colpo solo
+        # Usiamo st.form per salvare tutto in un colpo solo ed evitare ricaricamenti continui
         with st.form("athlete_settings"):
             c1, c2, c3, c4, c5 = st.columns(5)
             with c1: 
@@ -210,33 +210,40 @@ else:
             save_btn = st.form_submit_button("💾 Salva Profilo")
             
             if save_btn and not st.session_state.demo_mode:
-                # Aggiorniamo le variabili locali subito
-                weight, hr_max, hr_rest, ftp, age = new_weight, new_hr_max, new_hr_rest, new_ftp, new_age
-                
-                # Salviamo su Supabase
+                # 3. SALVATAGGIO ROBUSTO (Type Casting)
+                athlete_id = ath.get("id")
+                if not athlete_id:
+                    st.error("❌ Errore critico: ID Atleta non trovato nel token.")
+                    st.stop()
+
+                # Creiamo il payload forzando i tipi corretti per Supabase
                 profile_payload = {
-                    "id": ath.get("id"),
-                    "firstname": ath.get("firstname"),
-                    "lastname": ath.get("lastname"),
-                    "weight": new_weight,
-                    "hr_max": new_hr_max,
-                    "hr_rest": new_hr_rest,
-                    "ftp": new_ftp,
-                    "age": new_age,
+                    "id": int(athlete_id),             # Forza intero (bigint)
+                    "firstname": str(ath.get("firstname", "")),
+                    "lastname": str(ath.get("lastname", "")),
+                    "weight": float(new_weight),       # Forza float (numeric)
+                    "hr_max": int(new_hr_max),         # Forza int
+                    "hr_rest": int(new_hr_rest),       # Forza int
+                    "ftp": int(new_ftp),               # Forza int
+                    "age": int(new_age),               # Forza int
                     "updated_at": datetime.now().isoformat()
                 }
+                
+                # Chiamata al servizio DB
                 if db_svc.save_athlete_profile(profile_payload):
-                    st.success("Profilo aggiornato e salvato!")
+                    # Aggiorniamo le variabili locali per vederle subito corrette
+                    weight, hr_max, hr_rest, ftp, age = new_weight, new_hr_max, new_hr_rest, new_ftp, new_age
+                    st.success("✅ Profilo aggiornato e salvato!")
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.error("Errore nel salvataggio.")
+                    st.error("❌ Errore nel salvataggio su database. Controlla la console.")
 
+        # Feedback visivo sullo stato dei dati
         if zones_data and not saved_profile:
-            st.caption("ℹ️ Dati iniziali sincronizzati da Strava. Clicca 'Salva' per memorizzarli.")
+            st.caption("ℹ️ Dati iniziali sincronizzati da Strava. Clicca 'Salva' per memorizzarli nel database.")
         elif saved_profile:
-            st.caption("✅ Profilo caricato dal database.")
-
+            st.caption("✅ Profilo caricato dal database personale.")
     
     # --- 8. TOOLBAR CENTRALE (Filtri e Sync) ---
     space_L, col_controls, space_R = st.columns([3, 2, 3])
