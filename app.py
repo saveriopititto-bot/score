@@ -168,12 +168,20 @@ else:
             if s_ftp: 
                 ftp = int(s_ftp)
             
-            # 3. Età (Calcolata)
-            birthdate = ath.get('birthdate')
+            # 3. ETÀ (CALCOLO AUTOMATICO) <--- NUOVO BLOCCO
+            birthdate = ath.get('birthdate') # Formato: "1990-05-21"
             if birthdate:
                 try:
-                    age = datetime.now().year - int(birthdate.split("-")[0])
-                except: pass
+                    # Prende i primi 4 caratteri (l'anno) e fa la sottrazione
+                    b_year = int(str(birthdate).split("-")[0])
+                    current_year = datetime.now().year
+                    calculated_age = current_year - b_year
+                    
+                    # Controllo di sicurezza (es. se viene 0 o 200 anni, ignoriamo)
+                    if 10 < calculated_age < 100:
+                        age = calculated_age
+                except: 
+                    pass # Se fallisce, tiene il default (30)
 
             # 4. Scarico Zone (Heart Rate e Power)
             if "strava_zones" not in st.session_state:
@@ -185,36 +193,32 @@ else:
                 # --- FIX FC MAX (-1) ---
                 hr_zones = zones_data.get("heart_rate", {}).get("zones", [])
                 if hr_zones:
-                    # Strava mette -1 nell'ultima zona per dire "infinito"
                     extracted_max = hr_zones[-1].get("max")
                     if extracted_max and extracted_max > 0: 
                         hr_max = int(extracted_max)
                     else:
-                        # Se è -1, proviamo a stimarlo: Inizio Ultima Zona / 0.90 (Stima approssimativa)
-                        # Oppure lasciamo il default (220-età) che è più sicuro del -1
-                        pass 
+                        # Se è -1, proviamo a stimarlo con formula teorica se abbiamo l'età
+                        # Formula Tanaka: 208 - (0.7 * età)
+                        if age > 0:
+                            hr_max = int(208 - (0.7 * age))
 
                 # --- FIX FTP MANCANTE (Reverse Engineering dalle Power Zones) ---
-                # Se l'FTP non c'era nel profilo (caso tuo), lo calcoliamo dalle zone
-                if ftp == Config.DEFAULT_FTP: # Se è ancora il default (200)
+                if ftp == Config.DEFAULT_FTP: 
                     pwr_zones = zones_data.get("power", {}).get("zones", [])
-                    # Cerchiamo la Zona 2 (Endurance) che di solito è l'indice 1
                     if len(pwr_zones) > 1:
-                        z2_max = pwr_zones[1].get("max") # Esempio: 138
+                        z2_max = pwr_zones[1].get("max") 
                         if z2_max and z2_max > 0:
-                            # La Z2 finisce al 75% dell'FTP -> FTP = Z2_max / 0.75
-                            calculated_ftp = int(z2_max / 0.75)
-                            ftp = calculated_ftp
+                            ftp = int(z2_max / 0.75)
 
     # Form Settings
     with st.expander("⚙️ Profilo Atleta & Parametri Fisici", expanded=False):
         with st.form("athlete_settings"):
             c1, c2, c3, c4, c5 = st.columns(5)
             with c1: new_weight = st.number_input("Peso (kg)", value=float(weight), step=0.5)
-            with c2: new_hr_max = st.number_input("FC Max", value=int(hr_max), help="Se vedi il default, Strava ha inviato -1")
+            with c2: new_hr_max = st.number_input("FC Max", value=int(hr_max))
             with c3: new_hr_rest = st.number_input("FC Riposo", value=int(hr_rest), help="Inserisci manualmente")
-            with c4: new_ftp = st.number_input("FTP (W)", value=int(ftp), help="Calcolato dalle tue zone Strava se mancante")
-            with c5: new_age = st.number_input("Età", value=int(age))
+            with c4: new_ftp = st.number_input("FTP (W)", value=int(ftp), help="Calcolato dalle Zone se mancante")
+            with c5: new_age = st.number_input("Età", value=int(age), help="Calcolata dalla data di nascita Strava")
             
             save_btn = st.form_submit_button("💾 Salva Profilo")
             
@@ -241,7 +245,6 @@ else:
                     
                     if success:
                         st.success("✅ Profilo salvato con successo!")
-                        # Aggiorniamo le variabili locali
                         weight, hr_max, hr_rest, ftp, age = new_weight, new_hr_max, new_hr_rest, new_ftp, new_age
                         time.sleep(1)
                         st.rerun()
@@ -249,10 +252,9 @@ else:
                         st.error(f"❌ Errore DB: {error_msg}")
 
         if zones_data and not saved_profile:
-            st.caption(f"ℹ️ Dati stimati da Strava (FTP rilevato ~{ftp}W). Clicca Salva per confermare.")
+            st.caption(f"ℹ️ Dati rilevati: FTP ~{ftp}W, Età {age} anni. Clicca Salva per confermare.")
         elif saved_profile:
             st.caption("✅ Profilo caricato dal database.")
-
     # --- 8. SYNC TOOLBAR ---
     space_L, col_controls, space_R = st.columns([3, 2, 3])
     with col_controls:
