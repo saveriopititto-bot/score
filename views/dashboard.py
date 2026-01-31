@@ -6,7 +6,7 @@ from config import Config
 from engine.core import ScoreEngine, RunMetrics
 from controllers.sync_controller import SyncController
 from ui.legal import render_legal_section
-from ui.visuals import render_history_table, render_trend_chart, render_scatter_chart, render_zones_chart
+from ui.visuals import render_history_table, render_trend_chart, render_scatter_chart, render_zones_chart, render_quality_badge, render_trend_card, get_coach_feedback
 from ui.feedback import render_feedback_form
 
 # Components
@@ -133,12 +133,7 @@ def render_dashboard(auth_svc, db_svc):
                 
                 with c_qual:
                     q = feedback['quality']
-                    st.markdown(f"""
-                    <div style="background:{q['color']}22; border:2px solid {q['color']}; padding:15px; border-radius:15px; text-align:center;">
-                        <span style="color:#666; font-size:0.8rem; font-weight:700;">LAST RUN QUALITY</span><br>
-                        <span style="color:{q['color']}; font-size:1.6rem; font-weight:900;">{q['label']}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    render_quality_badge(q['label'], q['color'])
                     
                     if feedback['achievements']:
                         with st.expander("🏅 Achievements", expanded=True):
@@ -147,20 +142,17 @@ def render_dashboard(auth_svc, db_svc):
 
                 with c_trend:
                     tr = feedback['trend']
-                    icon = "📈" if tr['direction'] == "up" else "📉" if tr['direction'] == "down" else "⚖️"
-                    st.markdown(f"""
-                    <div style="background:#f8f9fa; border:1px solid #eee; padding:15px; border-radius:15px;">
-                        <span style="color:#666; font-size:0.8rem; font-weight:700;">QUALITY TREND {icon}</span><br>
-                        <span style="font-size:1.4rem; font-weight:800;">{tr['recent_avg']}</span>
-                        <small style="color:{'green' if tr['delta'] > 0 else 'red'};">({'+' if tr['delta'] > 0 else ''}{tr['delta']})</small>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    render_trend_card(tr['delta'])
+                    
+                    # Microcopy Coach Feedback
+                    msg = get_coach_feedback("up" if tr['delta'] > 3 else "down" if tr['delta'] < -3 else "flat")
+                    st.caption(f"🧠 {msg}")
                 
                 with c_comp:
                     cp = feedback['comparison']
                     if cp:
                         st.markdown(f"""
-                        <div style="background:#f8f9fa; border:1px solid #eee; padding:15px; border-radius:15px;">
+                        <div class="glass-card">
                             <span style="color:#666; font-size:0.8rem; font-weight:700;">VS LAST 10 RUNS</span><br>
                             <div style="display:flex; justify-content:space-between; margin-top:5px;">
                                 <span>Media: <b>{'+' if cp['vs_avg'] > 0 else ''}{cp['vs_avg']}</b></span>

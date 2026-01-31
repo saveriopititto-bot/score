@@ -35,7 +35,21 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-apply_custom_style()
+# --- THEME STATE & TOGGLE ---
+if "theme" not in st.session_state:
+    st.session_state.theme = "light"
+
+with st.sidebar:
+    st.markdown("### 🎨 Tema")
+    theme_sel = st.radio("Modalità", ["Light", "Dark"], index=0 if st.session_state.theme == "light" else 1, horizontal=True)
+    new_theme = theme_sel.lower()
+    if new_theme != st.session_state.theme:
+        st.session_state.theme = new_theme
+        st.rerun()
+
+# Apply Theme
+from ui.style import apply_theme
+apply_theme(st.session_state.theme)
 
 # --- 4. SERVIZI ---
 strava_creds = Config.get_strava_creds()
