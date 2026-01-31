@@ -331,7 +331,7 @@ else:
             eng = ScoreEngine()
             
             # --- DEBUG TEMPORANEO (Rimuovere dopo test) ---
-            if st.checkbox("Mostra Debug Engine", value=True):
+            if st.checkbox("Mostra Debug Engine", value=False):
                  st.write(f"Has gaming_feedback: {hasattr(eng, 'gaming_feedback')}")
                  st.write(f"Has run_quality: {hasattr(eng, 'run_quality')}")
                  st.write("Dir:", dir(eng))
