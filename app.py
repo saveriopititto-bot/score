@@ -134,31 +134,24 @@ if not st.session_state.strava_token:
 
 # --- B. DASHBOARD (Loggato) ---
 else:
-    # HEADER
-    col_header, col_profile = st.columns([3, 1], gap="large")
+    # 1. HEADER (Solo Logo e Logout)
+    col_header, col_logout = st.columns([3, 1], gap="large")
     with col_header:
         try: st.image("sCore.png", width=220) 
         except: st.title("sCore Lab 4.1")
         if st.session_state.get("demo_mode"): st.caption("🔴 DEMO MODE")
 
-    with col_profile:
-        ath = st.session_state.strava_token.get("athlete", {})
-        athlete_name = f"{ath.get('firstname', 'Atleta')} {ath.get('lastname', '')}"
-        
-        st.markdown(f"""
-        <div style="text-align: right; background: white; padding: 8px 15px; border-radius: 12px; border: 1px solid #eee;">
-            <small style="color: #888;">Profilo Attivo</small><br>
-            <strong>{athlete_name}</strong>
-        </div>
-        """, unsafe_allow_html=True)
-        
+    with col_logout:
         if st.button("Esci / Logout", key="logout_btn", use_container_width=True):
             st.session_state.strava_token = None
             st.session_state.demo_mode = False
             if "strava_zones" in st.session_state: del st.session_state.strava_zones
             st.rerun()
 
-    # --- CONFIGURAZIONE ATLETA (Smart Sync) ---
+    # --- 2. CONFIGURAZIONE ATLETA (Dati caricati subito, visualizzati nei Tab) ---
+    ath = st.session_state.strava_token.get("athlete", {})
+    athlete_name = f"{ath.get('firstname', 'Atleta')} {ath.get('lastname', '')}"
+    
     weight, hr_max, hr_rest, ftp, age, sex = Config.DEFAULT_WEIGHT, Config.DEFAULT_HR_MAX, Config.DEFAULT_HR_REST, Config.DEFAULT_FTP, Config.DEFAULT_AGE, "M"
     zones_data = None
     saved_profile = None
@@ -180,18 +173,12 @@ else:
             if s_weight: weight = float(s_weight)
             s_ftp = ath.get('ftp', 0) 
             if s_ftp: ftp = int(s_ftp)
-            
-            # Strava returns 'M', 'F' or None usually
             s_sex = ath.get('sex')
             if s_sex in ['M', 'F']: sex = s_sex 
             
             birthdate = ath.get('birthdate')
             if birthdate:
-                try:
-                    b_year = int(str(birthdate).split("-")[0])
-                    curr_year = datetime.now().year
-                    calc_age = curr_year - b_year
-                    if 10 < calc_age < 100: age = calc_age
+                try: age = datetime.now().year - int(str(birthdate).split("-")[0])
                 except: pass
 
             if "strava_zones" not in st.session_state:
@@ -203,8 +190,7 @@ else:
                 if hr_zones:
                     extracted_max = hr_zones[-1].get("max")
                     if extracted_max and extracted_max > 0: hr_max = int(extracted_max)
-                    else: 
-                        if age > 0: hr_max = int(208 - (0.7 * age))
+                    elif age > 0: hr_max = int(208 - (0.7 * age))
                 
                 if ftp == Config.DEFAULT_FTP: 
                     pwr_zones = zones_data.get("power", {}).get("zones", [])
@@ -212,7 +198,17 @@ else:
                         z2_max = pwr_zones[1].get("max") 
                         if z2_max and z2_max > 0: ftp = int(z2_max / 0.75)
 
-    with st.expander("⚙️ Profilo Atleta & Parametri Fisici", expanded=False):
+    # --- 3. TOP NAVIGATION (TABS) ---
+    t_prof, t_dash, t_lab = st.tabs(["👤 Profilo Atleta", "📊 Dashboard Pro", "🔬 Laboratorio Analisi"])
+    
+    with t_prof:
+        st.markdown(f"#### Benvenuto, {athlete_name}")
+        st.markdown(f"""
+        <div style="background: white; padding: 15px; border-radius: 12px; border: 1px solid #eee; margin-bottom: 20px;">
+            <small style="color: #888;">ID Atleta Strava: {ath.get('id', 'N/A')}</small>
+        </div>
+        """, unsafe_allow_html=True)
+        
         with st.form("athlete_settings"):
             c1, c2, c3, c4, c5, c6 = st.columns(6)
             with c1: new_weight = st.number_input("Peso (kg)", value=float(weight), step=0.5)
@@ -239,7 +235,6 @@ else:
                     success, msg = db_svc.save_athlete_profile(payload)
                     if success:
                         st.success("✅ Profilo salvato!")
-                        weight, hr_max, hr_rest, ftp, age, sex = new_weight, new_hr_max, new_hr_rest, new_ftp, new_age, new_sex
                         time.sleep(1)
                         st.rerun()
                     else:
@@ -250,12 +245,11 @@ else:
         elif saved_profile:
             st.caption("✅ Profilo caricato dal database.")
 
-    st.divider()
-
-    # --- SYNC TOOLBAR ---
-    space_L, col_controls, space_R = st.columns([3, 2, 3])
+    # --- 4. SYNC TOOLBAR (Centrata) ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    _, col_controls, _ = st.columns([1, 2, 1])
     with col_controls:
-        c_drop, c_btn = st.columns([2, 1], gap="small", vertical_alignment="bottom")
+        c_drop, c_btn = st.columns([2, 1], gap="medium", vertical_alignment="bottom")
         with c_drop:
             time_options = {"30 Giorni": 30, "90 Giorni": 90, "12 Mesi": 365, "Storico": 3650}
             selected_label = st.selectbox("Periodo Analisi:", list(time_options.keys()), index=2)
@@ -378,46 +372,21 @@ else:
             wr_pct_val = cur_run.get('WR_Pct', 0.0)
 
             # === TAB 1: DASHBOARD ===
-            with t1:
+            with t_dash:
                 # INJECT CUSTOM CSS
                 st.markdown("""
                 <style>
-                    .stat-circle {
-                        transition: all 0.3s ease;
-                    }
-                    .stat-circle:hover {
-                        transform: scale(1.05);
-                        box-shadow: 0 15px 35px rgba(0,0,0,0.15) !important;
-                    }
+                    .stat-circle { transition: all 0.3s ease; }
+                    .stat-circle:hover { transform: scale(1.05); box-shadow: 0 15px 35px rgba(0,0,0,0.15) !important; }
                     
                     /* SVG Animation for Central Circle */
-                    .score-circle-svg circle.progress {
-                        fill: none;
-                        stroke: #CDFAD5;
-                        stroke-width: 6;
-                        stroke-dasharray: 0, 1000;
-                        transition: stroke-dasharray 1s ease-out;
-                    }
-                    .score-circle-container:hover circle.progress {
-                        stroke-dasharray: 800, 1000;
-                        stroke: #6C5DD3;
-                    }
+                    .score-circle-svg circle.progress { fill: none; stroke: #CDFAD5; stroke-width: 6; stroke-dasharray: 0, 1000; transition: stroke-dasharray 1s ease-out; }
+                    .score-circle-container:hover circle.progress { stroke-dasharray: 800, 1000; stroke: #6C5DD3; }
                     
                     /* RESPONSIVE */
                     @media (max-width: 768px) {
-                        .stat-circle {
-                            width: 100px !important;
-                            height: 100px !important;
-                        }
-                        .stat-circle span:nth-of-type(1) { font-size: 0.55rem !important; }
-                        .stat-circle span:nth-of-type(2) { font-size: 1.6rem !important; }
-                        .stat-circle div { font-size: 0.5rem !important; padding: 2px 6px !important; }
-                        
-                        .score-circle-container {
-                            transform: scale(0.75);
-                            transform-origin: center top;
-                            margin-bottom: -50px;
-                        }
+                        .stat-circle { width: 110px !important; height: 110px !important; }
+                        .score-circle-container { transform: scale(0.75); transform-origin: center top; margin-bottom: -50px; }
                     }
                 </style>
                 """, unsafe_allow_html=True)
@@ -426,28 +395,24 @@ else:
                 c_pct, c_score, c_drift = st.columns([1, 2, 1], gap="small", vertical_alignment="center")
                 
                 with c_pct:
-                    # LEFT: PERCENTILE
-                    # Colore Dinamico Percentile (Ranking)
-                    pct_color = "#FF8080" # 0-25
+                    # LEFT: PERCENTILE (+10% size -> 155px)
+                    pct_color = "#FF8080"
                     if wr_pct_val > 75: pct_color = "#CDFAD5"
                     elif wr_pct_val > 50: pct_color = "#F6FDC3"
                     elif wr_pct_val > 25: pct_color = "#FFCF96"
 
                     st.markdown(f"""
                     <div style="display: flex; justify-content: center;">
-                        <div class="stat-circle" style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid {pct_color}; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
-                            <span style="color: #999; font-size: 0.65rem; font-weight: 700;">PERCENTILE</span>
-                            <span style="color: {pct_color}; font-size: 2.2rem; font-weight: 800; line-height: 1;">{wr_pct_val}%</span>
-                            <div style="background:{pct_color}22; color: #555; border: 1px solid {pct_color}; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">RANKING</div>
+                        <div class="stat-circle" style="width: 155px; height: 155px; border-radius: 50%; border: 5px solid {pct_color}; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
+                            <span style="color: #999; font-size: 0.70rem; font-weight: 700;">PERCENTILE</span>
+                            <span style="color: {pct_color}; font-size: 2.5rem; font-weight: 800; line-height: 1;">{wr_pct_val}%</span>
+                            <div style="background:{pct_color}22; color: #555; border: 1px solid {pct_color}; padding:2px 12px; border-radius:15px; font-size:0.65rem; font-weight:700; margin-top:5px;">RANKING</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
                 
                 with c_score:
                     # CENTER: SCORE
-                    # Colore basato su Trend
-                    
                     clean_rank = cur_run['Rank'].split('/')[0].strip()
-
                     st.markdown(f"""
                     <div class="score-circle-container" style="display: flex; justify-content: center; cursor: pointer;">
                         <div style="position: relative; width: 230px; height: 230px;">
@@ -464,72 +429,26 @@ else:
                     </div>""", unsafe_allow_html=True)
 
                 with c_drift:
+                    # RIGHT: DRIFT (+10% size -> 155px per simmetria)
                     dec_val = cur_run.get('Decoupling', 0.0)
-                    dec_color = "#10B981" 
-                    drift_cat = "ECCELLENTE"
-                    
-                    if dec_val > 5.0: 
-                        dec_color = "#EF4444" 
-                        drift_cat = "ATTENZIONE"
-                    elif dec_val > 3.0: 
-                        dec_color = "#F59E0B"
-                        drift_cat = "BUONO"
-                        
-                    if dec_val > 10.0:
-                         dec_color = "#991B1B"
-                         drift_cat = "CRITICO"
+                    dec_color = "#10B981"; drift_cat = "ECCELLENTE"
+                    if dec_val > 10.0: dec_color = "#991B1B"; drift_cat = "CRITICO"
+                    elif dec_val > 5.0: dec_color = "#EF4444"; drift_cat = "ATTENZIONE"
+                    elif dec_val > 3.0: dec_color = "#F59E0B"; drift_cat = "BUONO"
 
-                    # NUOVO DRIFT UI: Zoom resetto, Scritta rimossa
                     st.markdown(f"""
-<style>
-    .drift-container {{
-        position: relative;
-        width: 160px;
-        height: 160px;
-        margin: 0 auto;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }}
-    .drift-circle {{
-        width: 120px;
-        height: 120px;
-        border-radius: 50%;
-        border: 4px solid var(--drift-color);
-        background: white;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 5px 20px rgba(0,0,0,0.05);
-        z-index: 10;
-        position: relative;
-        transition: all 0.3s ease;
-    }}
-    
-    /* Hover ZOOM (come cerchio sinistro, ma ombra ridotta) */
-    .drift-circle:hover {{
-        transform: scale(1.05);
-        box-shadow: 0 10px 25px rgba(0,0,0,0.15); /* Radius ridotto rispetto a 35px */
-    }}
-</style>
-
-<div class="drift-container" style="--drift-color: {dec_color};">
-    <!-- Cerchio Centrale (Senza testo rotante) -->
-    <div class="drift-circle">
-        <span style="color:#999;font-size:0.65rem;font-weight:700;">DRIFT</span>
-        <span style="color:{dec_color};font-size:2.0rem;font-weight:800;line-height:1;">{dec_val}%</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+                    <div style="display: flex; justify-content: center;">
+                        <div class="stat-circle" style="width: 155px; height: 155px; border-radius: 50%; border: 5px solid {dec_color}; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
+                            <span style="color: #999; font-size: 0.70rem; font-weight: 700;">DRIFT</span>
+                            <span style="color: {dec_color}; font-size: 2.5rem; font-weight: 800; line-height: 1;">{dec_val}%</span>
+                            <div style="background:{dec_color}22; color: #555; border: 1px solid {dec_color}; padding:2px 12px; border-radius:15px; font-size:0.65rem; font-weight:700; margin-top:5px;">{drift_cat}</div>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                
-                # RIMOSSO: Metric Trend text-only ("LA SCRITTA CHE STA NEL BOX TREND TOGLILA")
-                
-            # === TAB 2: LABORATORIO (SPOSTATO TUTTO QUI) ===
-            with t2:
-                # BREAKDOWN E ARCHIVIO SPOSTATI QUI
+
+            # === TAB 2: LABORATORIO ===
+            with t_lab:
                 st.markdown("### 🔍 Analisi Dettagliata")
                 with st.expander("Perché questo punteggio? (Breakdown)", expanded=True):
                     details = cur_run.get("SCORE_DETAIL")
