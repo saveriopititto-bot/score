@@ -403,8 +403,9 @@ else:
             
             # Fallback: ricalcola se DB non ha dati gaming
             if not cur_quality or not cur_trend:
-                scores_hist = df['SCORE'].tolist()[::-1]
-                feedback = eng.gaming_feedback(scores_hist)
+                # Filter out None/NaN values to prevent AttributeError
+                scores_hist = df['SCORE'].dropna().tolist()[::-1]
+                feedback = eng.gaming_feedback(scores_hist) if scores_hist else {}
             else:
                 feedback = {
                     "quality": {"label": cur_quality, "color": eng.run_quality(cur_run['SCORE'])['color']} if isinstance(cur_quality, str) else cur_quality,
