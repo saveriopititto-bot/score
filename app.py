@@ -62,18 +62,20 @@ if "code" in st.query_params and not st.session_state.strava_token:
 
 # --- A. LANDING PAGE (Non Loggato) ---
 if not st.session_state.strava_token:
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 1. HERO SECTION (Titolo e Bottone)
     _, c_center, _ = st.columns([1, 2, 1])
     with c_center:
         try: st.image("sCore.png", use_container_width=True)
         except: st.markdown("<h1 style='text-align: center; color: #FFCF96;'>sCore Lab</h1>", unsafe_allow_html=True)
         
         st.markdown("""
-        <div style="text-align: center; margin-top: -10px; margin-bottom: 30px;">
+        <div style="text-align: center; margin-bottom: 30px;">
             <h3 style="color: #6C5DD3; font-weight: 800; letter-spacing: -0.5px;">Corri. Analizza. Evolvi.</h3>
-            <p style="color: #636E72; font-size: 1.1rem; line-height: 1.6;">
-                Nuovo Engine 4.1: Analisi NumPy Powered.<br>
-                Scopri il tuo vero potenziale.
+            <p style="color: #636E72; font-size: 1.1rem;">
+                Il nuovo standard per l'analisi della corsa.<br>
+                Powered by <strong>Engine 4.1</strong>
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -90,6 +92,56 @@ if not st.session_state.strava_token:
                 st.session_state.strava_token = {"access_token": "DEMO", "athlete": {"id": 123, "firstname": "Demo", "lastname": "User"}}
                 st.rerun()
 
+    st.markdown("<br><br><hr><br>", unsafe_allow_html=True)
+
+    # 2. IL MANIFESTO (Le 3 Schermate che hai scritto)
+    st.markdown("<h3 style='text-align: center; color: #444;'>Il Metodo sCore</h3><br>", unsafe_allow_html=True)
+
+    col_a, col_b, col_c = st.columns(3, gap="large")
+
+    with col_a:
+        st.markdown("""
+        <div style="background-color: #F8F9FA; padding: 20px; border-radius: 15px; border-left: 5px solid #FFCF96; height: 100%;">
+            <h4 style="color: #444;">🧠 Capire com’è andata</h4>
+            <p style="font-size: 0.9rem; color: #555;">
+                Non tutte le corse sono uguali.<br>
+                SCORE non guarda solo velocità o distanza, ma <strong>come hai gestito lo sforzo</strong> nel tuo contesto attuale.
+            </p>
+            <p style="font-size: 0.9rem; font-weight: bold;">
+                📊 Un numero solo,<br>molte informazioni utili.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_b:
+        st.markdown("""
+        <div style="background-color: #F8F9FA; padding: 20px; border-radius: 15px; border-left: 5px solid #F6FDC3; height: 100%;">
+            <h4 style="color: #444;">🎮 Gioca con consapevolezza</h4>
+            <p style="font-size: 0.9rem; color: #555;">
+                Non è una gara, è un feedback. Nessun giudizio, solo un obiettivo: <strong>correre meglio la prossima volta</strong>.
+            </p>
+            <p style="font-size: 0.9rem;">
+                Un punteggio alto = corsa controllata e sostenibile.<br>
+                Un punteggio basso? 👉 <em>Solo un segnale, non un errore.</em>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_c:
+        st.markdown("""
+        <div style="background-color: #F8F9FA; padding: 20px; border-radius: 15px; border-left: 5px solid #CDFAD5; height: 100%;">
+            <h4 style="color: #444;">📈 Migliora nel tempo</h4>
+            <p style="font-size: 0.9rem; color: #555;">
+                Il vero progresso non è spingere sempre, ma capire <strong>quando</strong> farlo.
+                Usa SCORE per riconoscere i giorni buoni e quelli no.
+            </p>
+            <p style="font-size: 0.9rem; font-weight: bold;">
+                Allenarsi bene non significa fare di più,<br>ma fare meglio.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 3. FOOTER
     st.markdown("<br><br>", unsafe_allow_html=True)
     render_legal_section()
 
