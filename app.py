@@ -357,8 +357,8 @@ else:
                 with c_exp:
                     exp_score = round(cur_run['SCORE_MA_28'], 2)
                     st.markdown(f"""
-                    <div class="stat-circle" style="display: flex; justify-content: center;">
-                        <div style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #E0E7FF; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
+                    <div style="display: flex; justify-content: center;">
+                        <div class="stat-circle" style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #E0E7FF; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
                             <span style="color: #999; font-size: 0.65rem; font-weight: 700;">ATTESO</span>
                             <span style="color: #6366F1; font-size: 2.2rem; font-weight: 800; line-height: 1;">{exp_score}</span>
                             <div style="background:#E0E7FF; color:#6366F1; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">BASELINE</div>
@@ -391,8 +391,8 @@ else:
 
                 with c_trend:
                     st.markdown(f"""
-                    <div class="stat-circle" style="display: flex; justify-content: center;">
-                        <div style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #F3F4F6; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
+                    <div style="display: flex; justify-content: center;">
+                        <div class="stat-circle" style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #F3F4F6; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
                             <span style="color: #999; font-size: 0.65rem; font-weight: 700;">TREND</span>
                             <span style="color: #4B5563; font-size: 2.2rem; font-weight: 800; line-height: 1;">{round(prev_ma7, 2)}</span>
                             <div style="background:#F3F4F6; color:#4B5563; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">LAST 7D</div>
