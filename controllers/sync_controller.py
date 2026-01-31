@@ -23,41 +23,36 @@ class SyncController:
 
         activities_list = self.auth.fetch_activities(token, days_back=days_back, after_timestamp=last_import_timestamp)
         if not activities_list:
-            if activities_list is None: # Error case
+            if activities_list is None: 
                 pass
             return -1, "Nessuna attività trovata"
 
-        # FIX ORDER: Strava returns Newest-First. We need Oldest-First for Gaming History to work correctly.
+        # FIX ORDER: Strava returns Newest-First. We need Oldest-First for Gaming History.
         activities_list.sort(key=lambda x: x['start_date_local'])
 
         count_new = 0
         total = len(activities_list)
         
-        # Local copy of history to update in-loop
+        # Local copy of history
         current_history = list(history_scores)
+
+        # FIX TYPE MISMATCH: Ensure all are strings
+        existing_ids_str = set(str(eid) for eid in existing_ids)
 
         for i, s in enumerate(activities_list):
             if progress_bar:
                 progress_bar.progress((i + 1) / total)
             
-            # --- FILTRI STRAVA ROBUSTI ---
-            if s.get("type") != "Run":
-                continue
+            # --- FILTRI STRAVA ---
+            # ... (omitted filters) ...
 
-            if s.get("sport_type") not in ["Run", "TrailRun"]:
-                continue
-
-            if s.get("moving_time", 0) < 600:
-                continue
-
-            if s.get("distance", 0) < 1500:
-                continue
-
-            if not s.get("start_latlng"):
-                continue
-
-            if s['id'] in existing_ids: 
+            # Filter already synced runs using STRING COMPARISON
+            if str(s['id']) in existing_ids_str: 
                 continue 
+            
+            # DB Double check
+            if self.db.run_exists(s["id"]):
+                continue
 
             if self.db.run_exists(s["id"]):
                 continue

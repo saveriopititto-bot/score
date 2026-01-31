@@ -164,15 +164,20 @@ class StravaService:
         page = 1
         
         while True:
+            # FIX PAGINAZIONE: Loop infinito finché Strava restituisce dati
             url = f"{self.base_url}/athlete/activities?after={epoch_time}&per_page=50&page={page}"
             data = self._request_with_retry("GET", url, headers=headers)
             
-            if not data: break # Fine o Errore
+            if not data: 
+                break # Fine o Errore
             
             runs = [x for x in data if x.get('type') == 'Run']
             all_activities.extend(runs)
             
-            if len(data) < 50: break # Meno di 50 elementi = ultima pagina
+            # Se riceviamo meno di 50 elementi, è l'ultima pagina.
+            if len(data) < 50: 
+                break 
+                
             page += 1
             
         return all_activities

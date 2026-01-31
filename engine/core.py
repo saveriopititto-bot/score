@@ -140,52 +140,37 @@ class ScoreEngine:
         self,
         power_stream: List[float],
         hr_stream: List[float],
-        window_sec: int = 300
+        window_sec: int = 300 # Unused in 4.2 but kept for signature comp
     ) -> float:
         """
-        Drift robusto (TrainingPeaks-like).
-        Usa smoothing + finestre fisiologiche.
+        Drift Fisiologico (Engine 4.2).
+        Basato su Costo Cardiaco (HR/Power) tra prima e seconda metà.
         """
-
         power = np.array(power_stream)
         hr = np.array(hr_stream)
 
-        # --- pulizia ---
-        mask = (power > 0) & (hr > 0)
-        power = power[mask]
-        hr = hr[mask]
-
-        if len(power) < window_sec * 2:
-            return 0.0
-
-        # --- smoothing 30s ---
-        def smooth(x, w=30):
-            if len(x) < w: return x
-            return np.convolve(x, np.ones(w)/w, mode='valid')
-
-        p_s = smooth(power)
-        h_s = smooth(hr)
-
-        n = len(p_s)
-        w = int(window_sec) # cast to int safe
-
-        if n < 2*w:
+        # Minimo 120 datapoint (2 min) per validità
+        if len(power) < 120 or len(hr) < 120:
              return 0.0
 
-        p_start = np.median(p_s[:w])
-        h_start = np.median(h_s[:w])
-        p_end = np.median(p_s[-w:])
-        h_end = np.median(h_s[-w:])
+        n = len(power)
+        split = int(n * 0.5)
 
-        if h_start == 0 or h_end == 0 or p_start == 0:
+        # Divisione in due metà
+        p1, h1 = np.mean(power[:split]), np.mean(hr[:split])
+        p2, h2 = np.mean(power[split:]), np.mean(hr[split:])
+
+        # Protezione divisione per zero
+        if p1 <= 0 or p2 <= 0 or h1 <= 0 or h2 <= 0:
             return 0.0
 
-        ratio1 = p_start / h_start
-        ratio2 = p_end / h_end
+        # Calcolo Costo Cardiaco (battiti per watt)
+        cost1 = h1 / p1
+        cost2 = h2 / p2
 
-        D = (ratio1 - ratio2) / ratio1
-        D = (ratio1 - ratio2) / ratio1
-        return float(D)
+        # Calcolo Drift % (sempre >= 0)
+        drift = (cost2 - cost1) / cost1
+        return float(max(0.0, drift))
 
     def calculate_zones(self, watts_stream: List[int], ftp: int) -> Dict[str, float]:
         """Calcola distribuzione zone per i grafici"""
@@ -247,24 +232,23 @@ class ScoreEngine:
             + max(0, 0.005 * (humidity - 60))
         )
 
-        # ---- stabilità (Drift Normalizzato per durata)
-        # CORREZIONE 3: D positivo e scalato
-        # TrainingPeaks style: drift is fully relevant only after significant duration
-        # We apply full penalty only if duration > 45min (0.75h)
+        # ---- stabilità (Drift 4.2 Logic)
+        # D here is already the Cost Index drift (max 0).
+        # We apply penalty if drift is high.
+        stability = np.exp(-alpha * D)
+
+        # ---- SCORE RAW calculation
+        # Raw value - no arbitrary scaling
+        raw_score = W_eff * (WCF * P_eff / HRR_eff) * stability
         
-        D = max(0.0, D)
-        if T_hours < 0.5:
-             D_eff = 0.0
-        else:
-             D_eff = D * min(1.0, T_hours / 0.75)
-
-        # Use D_eff for penalty calculation instead of raw D
-        stability = np.exp(-alpha * np.sqrt(D_eff / max(T_hours, 1e-6)))
-
-        # ---- SCORE finale
-        # Apply scaling factor to bring into 0-100 range
-        scale = getattr(Config, "SCALING_FACTOR", 280.0)
-        SCORE = W_eff * (WCF * P_eff / HRR_eff) * stability * scale
+        # ---- SCORE 4.2 FINAL LOGISTIC NORMALIZATION
+        # Maps raw score to 0-100 curve
+        # RAW expected roughly 0.5 - 2.0 range for normal activities
+        # Tuning factor K=2.5 provides good spread
+        K = 2.5
+        score_logistic = 100 * (1 - np.exp(-K * raw_score))
+        
+        SCORE = np.clip(score_logistic, 0.0, 100.0)
 
         return SCORE, p, Tref, WCF
 
