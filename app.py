@@ -82,7 +82,7 @@ if not st.session_state.strava_token:
         <div style="text-align: center; margin-top: 10px; margin-bottom: 20px;">
             <p style="color: #636E72; font-size: 1.1rem;">
                 Il nuovo standard per l'analisi della corsa.<br>
-                Powered by <strong>Engine 4.1</strong>
+                Powered by <strong>sCorengine 4.1</strong>
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -90,14 +90,14 @@ if not st.session_state.strava_token:
     st.markdown("<br>", unsafe_allow_html=True) 
 
     # 2. IL MANIFESTO
-    st.markdown("<h3 style='text-align: center; color: #E67E22;'>Il Metodo sCore</h3><br>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #E67E22; margin-bottom: 0;'>Il Metodo sCore</h3>", unsafe_allow_html=True)
 
     col_a, col_b, col_c = st.columns(3, gap="large")
 
     with col_a:
         st.markdown("""
         <div style="background-color: #F8F9FA; padding: 20px; border-radius: 15px; border-left: 5px solid #FFCF96; height: 100%;">
-            <h4 style="color: #444;">Capire com’è andata</h4>
+            <h4 style="color: #444; text-transform: uppercase; letter-spacing: 1px;">CORRI</h4>
             <p style="font-size: 0.9rem; color: #555;">
                 Non tutte le corse sono uguali.<br>
                 SCORE non guarda solo velocità o distanza, ma <strong>come hai gestito lo sforzo</strong> nel tuo contesto attuale.
@@ -111,7 +111,7 @@ if not st.session_state.strava_token:
     with col_b:
         st.markdown("""
         <div style="background-color: #F8F9FA; padding: 20px; border-radius: 15px; border-left: 5px solid #FF8080; height: 100%;">
-            <h4 style="color: #444;">Corri con consapevolezza</h4>
+            <h4 style="color: #444; text-transform: uppercase; letter-spacing: 1px;">ANALIZZA</h4>
             <p style="font-size: 0.9rem; color: #555;">
                 Non è una gara, è un feedback. Nessun giudizio, solo un obiettivo: <strong>correre meglio la prossima volta</strong>.
             </p>
@@ -125,7 +125,7 @@ if not st.session_state.strava_token:
     with col_c:
         st.markdown("""
         <div style="background-color: #F8F9FA; padding: 20px; border-radius: 15px; border-left: 5px solid #CDFAD5; height: 100%;">
-            <h4 style="color: #444;">Migliora nel tempo</h4>
+            <h4 style="color: #444; text-transform: uppercase; letter-spacing: 1px;">EVOLVI</h4>
             <p style="font-size: 0.9rem; color: #555;">
                 Il vero progresso non è spingere sempre, ma capire <strong>quando</strong> farlo.
                 Usa SCORE per riconoscere i giorni buoni e quelli no.

@@ -25,7 +25,7 @@ def render_legal_section():
         with col1:
             st.markdown(f"### sCore Lab v1.0")
             st.caption(f"© {year} Progetto indipendente sviluppato in Python.")
-            st.info("⚠️ Non è uno strumento medico. Interpreta i dati con consapevolezza.")
+            st.caption("Non è uno strumento medico. Interpreta i dati con consapevolezza.")
             
         with col2:
             st.markdown("**Risorse**")
@@ -35,10 +35,8 @@ def render_legal_section():
 
         with col3:
             st.markdown("**Legale**")
-            if st.button("Privacy Policy"):
-                privacy.show()
-            if st.button("Terms of Service"):
-                terms.show()
+            st.markdown("[Privacy Policy](https://scorerun.streamlit.app/privacy)")
+            st.markdown("[Terms of Service](https://scorerun.streamlit.app/terms)")
 
         st.markdown("---")
         st.caption(f"All rights reserved &middot; sCore Lab {year}")
