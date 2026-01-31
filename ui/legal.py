@@ -25,7 +25,7 @@ def render_legal_section():
         with col1:
             titolo = "sCore Lab v1.0"
             descrizione = "Powered by <strong>sCorengine 4.1</strong>"
-            testo = f""<span style="font-size: 1.5rem; font-weight: bold;"><strong>{titolo}</strong><br>{descrizione}"
+            testo = f"{titolo}<br>{descrizione}"
 
             st.markdown(f"""
             <div style="text-align: left; margin-bottom: 30px;">
