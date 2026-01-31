@@ -456,13 +456,55 @@ else:
         transform: scale(0.95);
     }}
     
+    /* CUSTOM LEGEND TOOLTIP (Sopra) */
+    .drift-tooltip {{
+        position: absolute;
+        bottom: 150px; /* Sopra il cerchio */
+        left: 50%;
+        transform: translateX(-50%) translateY(10px);
+        background: white;
+        padding: 8px 12px;
+        border-radius: 12px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        z-index: 20;
+        width: max-content;
+        text-align: left;
+        border: 1px solid #f0f0f0;
+        pointer-events: none;
+    }}
+    
+    .drift-container:hover .drift-tooltip {{
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(-50%) translateY(0);
+    }}
+    
+    .drift-tooltip-item {{
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-bottom: 2px;
+        display: block;
+    }}
+    
     /* RESPONSIVE */
     @media (max-width: 768px) {{
         .drift-container {{ transform: scale(0.9); }}
+        /* Su mobile magari lo mostriamo sotto o statico? Per ora hover */
     }}
 </style>
 
 <div class="drift-container">
+    <!-- TOOLTIP CUSTOM -->
+    <div class="drift-tooltip">
+        <div class="drift-tooltip-item" style="color: #10B981;">&lt;3% Eccellente</div>
+        <div class="drift-tooltip-item" style="color: #F59E0B;">3-5% Buono</div>
+        <div class="drift-tooltip-item" style="color: #EF4444;">&gt;5% Attenzione</div>
+        <div class="drift-tooltip-item" style="color: #991B1B;">&gt;10% Critico</div>
+    </div>
+
     <div class="drift-circle">
         <span style="color:#999;font-size:0.65rem;font-weight:700;">DRIFT</span>
         <span style="color:{dec_color};font-size:2.2rem;font-weight:800;line-height:1;">{dec_val}%</span>
@@ -494,14 +536,7 @@ else:
                     with d2: st.metric("🔋 Volume", f"+{details.get('Volume', 0)}%")
                     with d3: st.metric("💓 Intensità", f"+{details.get('Intensità', 0)}%")
                     
-                    efficiency_help = """
-                    Legenda Efficienza (Drift):
-                    - <3% Eccellente (Verde)
-                    - 3-5% Buono (Giallo)
-                    - >5% Attenzione (Rosso)
-                    - >10% Critico (Amaranto)
-                    """
-                    with d4: st.metric("📉 Efficienza", f"{details.get('Malus Efficienza', 0)}", help=efficiency_help)
+                    with d4: st.metric("📉 Efficienza", f"{details.get('Malus Efficienza', 0)}")
 
                 with st.expander("📂 Archivio Attività", expanded=False):
                     render_history_table(df)
