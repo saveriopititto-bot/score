@@ -2,19 +2,26 @@ import google.generativeai as genai
 import json
 import requests
 import time
+import logging
 from datetime import datetime, timedelta
+from typing import Optional, Dict, List, Any, Tuple
+from config import Config
+
+# Setup Logger
+logger = logging.getLogger("sCore.API")
 
 class AICoachService:
-    def __init__(self, api_key):
+    def __init__(self, api_key: str):
         if not api_key:
             # Non bloccante se manca la chiave, ma il metodo fallirà elegantemente
             self.model = None
+            logger.warning("Gemini API Key missing")
             return
         
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel('gemini-pro')
 
-    def get_feedback(self, run_data, zones):
+    def get_feedback(self, run_data: Dict[str, Any], zones: Dict[str, float]) -> str:
         if not self.model: return "⚠️ API Key Gemini mancante."
         
         prompt = f"""
@@ -46,9 +53,10 @@ class AICoachService:
             response = self.model.generate_content(prompt)
             return response.text
         except Exception as e:
+            logger.error(f"Gemini API Error: {e}")
             return f"⚠️ Errore del Coach AI: {str(e)}"
 
-    def _format_pace(self, seconds, km):
+    def _format_pace(self, seconds: float, km: float) -> str:
         if km <= 0: return "0:00"
         pace_sec = seconds / km
         mins = int(pace_sec // 60)
@@ -56,10 +64,10 @@ class AICoachService:
         return f"{mins}:{secs:02d}"
 
 class WeatherService:
-    BASE_URL = "https://archive-api.open-meteo.com/v1/archive"
+    BASE_URL = Config.OPEN_METEO_URL
 
     @staticmethod
-    def get_weather(lat, lon, date_str, hour):
+    def get_weather(lat: float, lon: float, date_str: str, hour: int) -> Tuple[float, float]:
         """
         Recupera Meteo REALE storico da Open-Meteo.
         """
@@ -84,25 +92,26 @@ class WeatherService:
                     return float(temp), float(hum)
             
             # Fallback in caso di risposta strana
+            logger.warning(f"Weather API returned {res.status_code}")
             return 20.0, 50.0
             
         except Exception as e:
-            print(f"⚠️ Weather Error: {e}")
+            logger.error(f"WeatherService Error: {e}")
             return 20.0, 50.0 # Fallback Safe
 
 
 class StravaService:
-    def __init__(self, client_id, client_secret):
+    def __init__(self, client_id: str, client_secret: str):
         self.client_id = client_id
         self.client_secret = client_secret
-        self.base_url = "https://www.strava.com/api/v3"
+        self.base_url = Config.STRAVA_BASE_URL
     
-    def get_link(self, redirect_uri):
+    def get_link(self, redirect_uri: str) -> str:
         # NOTA: Aggiunto 'profile:read_all' per leggere Peso e Zone Cardiache
         scope = "activity:read_all,profile:read_all"
         return f"https://www.strava.com/oauth/authorize?client_id={self.client_id}&response_type=code&redirect_uri={redirect_uri}&approval_prompt=force&scope={scope}"
 
-    def get_token(self, code):
+    def get_token(self, code: str) -> Optional[Dict[str, Any]]:
         try:
             res = requests.post("https://www.strava.com/oauth/token", data={
                 "client_id": self.client_id,
@@ -112,11 +121,12 @@ class StravaService:
             }, timeout=10)
             if res.status_code == 200:
                 return res.json()
-        except:
+        except Exception as e:
+            logger.error(f"Strava Token Error: {e}")
             pass
         return None
 
-    def _request_with_retry(self, method, url, headers=None, params=None, max_retries=3):
+    def _request_with_retry(self, method: str, url: str, headers: Dict[str, str]=None, params: Dict[str, Any]=None, max_retries: int=3) -> Optional[Any]:
         """Wrapper con gestione Rate Limit e Retries"""
         for i in range(max_retries):
             try:
@@ -127,21 +137,21 @@ class StravaService:
                 
                 if res.status_code == 429:
                     # Rate Limit
-                    print(f"⚠️ Strava Rate Limit Hit! Waiting... (Attempt {i+1})")
+                    logger.warning(f"Strava Rate Limit Hit! Waiting... (Attempt {i+1})")
                     time.sleep(10 * (i+1)) # Backoff aggressivo
                     continue
                 
                 # Altri errori (401, 500)
-                print(f"⚠️ Strava API Error {res.status_code}: {res.text}")
+                logger.error(f"Strava API Error {res.status_code}: {res.text}")
                 return None
                 
             except requests.exceptions.RequestException as e:
-                print(f"⚠️ Network Error: {e}")
+                logger.error(f"Network Error: {e}")
                 time.sleep(2)
         
         return None
 
-    def fetch_activities(self, token, days_back=365):
+    def fetch_activities(self, token: str, days_back: int=365) -> List[Dict[str, Any]]:
         headers = {"Authorization": f"Bearer {token}"}
         start_date = datetime.now() - timedelta(days=days_back)
         epoch_time = int(start_date.timestamp())
@@ -163,13 +173,13 @@ class StravaService:
             
         return all_activities
 
-    def fetch_streams(self, token, activity_id):
+    def fetch_streams(self, token: str, activity_id: int) -> Optional[Dict[str, Any]]:
         headers = {"Authorization": f"Bearer {token}"}
         url = f"{self.base_url}/activities/{activity_id}/streams?keys=watts,heartrate&key_by_type=true"
         return self._request_with_retry("GET", url, headers=headers)
 
     # --- NUOVO METODO AGGIUNTO ---
-    def fetch_zones(self, token):
+    def fetch_zones(self, token: str) -> Optional[Dict[str, Any]]:
         """Scarica le zone cardiache dell'atleta per trovare la FC Max reale"""
         headers = {"Authorization": f"Bearer {token}"}
         url = f"{self.base_url}/athlete/zones"

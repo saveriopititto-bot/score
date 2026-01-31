@@ -70,3 +70,31 @@ class Config:
     def get_gemini_key():
         return st.secrets.get("gemini", {}).get("api_key")
 
+    # --- LOGGING ---
+    @staticmethod
+    def setup_logging():
+        import logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler()
+            ]
+        )
+        return logging.getLogger("sCore")
+
+    # --- EXTERNAL SERVICES ---
+    OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/archive"
+    STRAVA_BASE_URL = "https://www.strava.com/api/v3"
+
+    # --- ALGORITHM TUNING ---
+    SCALING_FACTOR = 280.0
+    ELITE_SPEED_M_S = 5.8
+    
+    # Score 4.1 Parameters
+    SCORE_ALPHA = 0.8
+    SCORE_BETA = 3.0
+    SCORE_GAMMA = 2.0
+    SCORE_W_REF = 6.0
+
+

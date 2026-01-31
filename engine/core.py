@@ -1,10 +1,18 @@
 import numpy as np
+import logging
+from typing import Dict, Any, Tuple, List, Optional
+from config import Config
 
-def clip(x, low, high):
+# Setup Logger
+logger = logging.getLogger("sCore.Engine")
+
+def clip(x: float, low: float, high: float) -> float:
     return max(low, min(x, high))
 
 class RunMetrics:
-    def __init__(self, avg_power, avg_hr, distance, moving_time, elevation_gain, weight, hr_max, hr_rest, temp_c, humidity):
+    def __init__(self, avg_power: float, avg_hr: float, distance: float, moving_time: int, 
+                 elevation_gain: float, weight: float, hr_max: int, hr_rest: int, 
+                 temp_c: float, humidity: float):
         self.avg_power = avg_power
         self.avg_hr = avg_hr
         self.distance_meters = distance
@@ -18,7 +26,7 @@ class RunMetrics:
 
 class ScoreEngine:
     
-    def calculate_decoupling(self, power_stream, hr_stream):
+    def calculate_decoupling(self, power_stream: List[int], hr_stream: List[int]) -> float:
         """
         Calcola il disaccoppiamento aerobico (Pw:Hr).
         Ritorna un valore decimale (es. 0.035 per 3.5%).
@@ -44,9 +52,9 @@ class ScoreEngine:
         ratio2 = p2 / h2
 
         decoupling = (ratio1 - ratio2) / ratio1
-        return decoupling
+        return float(decoupling)
 
-    def calculate_zones(self, watts_stream, ftp):
+    def calculate_zones(self, watts_stream: List[int], ftp: int) -> Dict[str, float]:
         """Calcola distribuzione zone per i grafici"""
         if not watts_stream or not ftp: return {}
         zones = [0]*7
@@ -63,7 +71,13 @@ class ScoreEngine:
         total = len(watts_stream)
         return {f"Z{i+1}": round(c/total*100, 1) for i, c in enumerate(zones)}
 
-    def compute_score_4_1_math(self, W_avg, ascent, distance, HR_avg, HR_rest, HR_max, T_act, T_ref, D, T_hours, temp_c, humidity, alpha=0.8, beta=3.0, gamma=2.0, W_ref=6.0):
+    def compute_score_4_1_math(self, W_avg: float, ascent: float, distance: float, HR_avg: float, 
+                               HR_rest: int, HR_max: int, T_act: float, T_ref: float, D: float, 
+                               T_hours: float, temp_c: float, humidity: float, 
+                               alpha: float = Config.SCORE_ALPHA, 
+                               beta: float = Config.SCORE_BETA, 
+                               gamma: float = Config.SCORE_GAMMA, 
+                               W_ref: float = Config.SCORE_W_REF) -> Tuple[float, float, float]:
         """
         SCORE 4.1 – Implementazione matematica pura fornita
         """
@@ -90,8 +104,7 @@ class ScoreEngine:
         P_eff = np.log(1 + gamma * P_clip)
 
         # 5. Stabilità cardiovascolare
-        # Nota: D qui deve essere percentuale (es. 3.5 per dire 3.5%) o decimale?
-        # Assumiamo che l'input D sia percentuale (es. 5.0) per far funzionare bene sqrt(D) con alpha 0.8
+        # Nota: D qui deve essere percentuale (es. 5.0) per far funzionare bene sqrt(D) con alpha 0.8
         stability = np.exp(-alpha * np.sqrt(abs(D) / max(T_hours, 1e-6)))
 
         # 6. SCORE finale
@@ -103,75 +116,79 @@ class ScoreEngine:
         
         return raw_score, WCF, P
 
-    def compute_score(self, m: RunMetrics, decoupling_decimal):
+    def compute_score(self, m: RunMetrics, decoupling_decimal: float) -> Tuple[float, Dict[str, Any], float, float]:
         """
         Wrapper che collega l'app alla matematica 4.1
         """
-        # Preparazione Dati per l'algoritmo
-        
-        # 1. Watt per Kg
-        w_kg = m.avg_power / m.weight
+        try:
+            # Preparazione Dati per l'algoritmo
+            
+            # 1. Watt per Kg
+            w_kg = m.avg_power / m.weight
 
-        # 2. Tempo di Riferimento (T_ref)
-        # Stimiamo un passo elite standard (es. 2:52/km o 5.8 m/s) per calcolare
-        # quanto tempo ci metterebbe un elite a fare questa distanza.
-        ELITE_SPEED_M_S = 5.8
-        t_ref_seconds = m.distance_meters / ELITE_SPEED_M_S
+            # 2. Tempo di Riferimento (T_ref)
+            t_ref_seconds = m.distance_meters / Config.ELITE_SPEED_M_S
 
-        # 3. Decoupling in formato percentuale (es. 3.5 invece di 0.035) per la formula
-        d_percent = decoupling_decimal * 100 
-        
-        # 4. Durata in ore
-        t_hours = m.moving_time / 3600.0
+            # 3. Decoupling in formato percentuale (es. 3.5 invece di 0.035) per la formula
+            d_percent = decoupling_decimal * 100 
+            
+            # 4. Durata in ore
+            t_hours = m.moving_time / 3600.0
 
-        # --- ESECUZIONE ALGORITMO 4.1 ---
-        raw_score, wcf, p_ratio = self.compute_score_4_1_math(
-            W_avg=w_kg,
-            ascent=m.elevation_gain,
-            distance=m.distance_meters,
-            HR_avg=m.avg_hr,
-            HR_rest=m.hr_rest,
-            HR_max=m.hr_max,
-            T_act=m.moving_time,
-            T_ref=t_ref_seconds,
-            D=d_percent,
-            T_hours=t_hours,
-            temp_c=m.temperature,
-            humidity=m.humidity
-        )
+            # --- ESECUZIONE ALGORITMO 4.1 ---
+            raw_score, wcf, p_ratio = self.compute_score_4_1_math(
+                W_avg=w_kg,
+                ascent=m.elevation_gain,
+                distance=m.distance_meters,
+                HR_avg=m.avg_hr,
+                HR_rest=m.hr_rest,
+                HR_max=m.hr_max,
+                T_act=m.moving_time,
+                T_ref=t_ref_seconds,
+                D=d_percent,
+                T_hours=t_hours,
+                temp_c=m.temperature,
+                humidity=m.humidity
+            )
 
-        # --- POST PROCESSING ---
-        
-        # Scaling del punteggio (La formula raw esce bassa, tipo 0.4 - 0.8)
-        # Moltiplichiamo per 100 o 200 per avere un indice leggibile su scala 0-100
-        # Tuning sperimentale: Moltiplicatore 250 porta un raw di 0.3 a 75.
-        SCALING_FACTOR = 280.0 
-        final_score = raw_score * SCALING_FACTOR
-        
-        # Percentuale rispetto al Record del Mondo (usiamo P della formula)
-        wr_pct = p_ratio * 100
+            # --- POST PROCESSING ---
+            
+            final_score = raw_score * Config.SCALING_FACTOR
+            
+            # Percentuale rispetto al Record del Mondo (usiamo P della formula)
+            wr_pct = p_ratio * 100
 
-        # Costruzione Dettagli per la UI
-        # Cerchiamo di attribuire il punteggio ai vari fattori
-        details = {
-            "Potenza": round(w_kg * 10, 1),           # Proxy visivo
-            "Volume": round(t_hours * 10, 1),         # Proxy visivo
-            "Intensità": round(m.avg_hr / m.hr_max * 100, 0),
-            "Malus Efficienza": f"-{round(abs(d_percent), 1)}%" if d_percent > 5 else "OK"
-        }
+            # Costruzione Dettagli per la UI
+            details = {
+                "Potenza": round(w_kg * 10, 1),           # Proxy visivo
+                "Volume": round(t_hours * 10, 1),         # Proxy visivo
+                "Intensità": round(m.avg_hr / m.hr_max * 100, 0),
+                "Malus Efficienza": f"-{round(abs(d_percent), 1)}%" if d_percent > 5 else "OK"
+            }
 
-        return final_score, details, wcf, wr_pct
+            return final_score, details, wcf, wr_pct
+            
+        except Exception as e:
+            logger.error(f"Error computing score: {e}")
+            return 0.0, {}, 1.0, 0.0
 
-    def get_rank(self, score):
+    def get_rank(self, score: float) -> Tuple[str, str]:
         if score >= 100: return "ELITE 🏆", "text-purple-600"
+        
+        # Use config thresholds if available, otherwise defaults
+        thresholds = getattr(Config, 'RANK_THRESHOLDS', {})
+        
+        # NOTE: logic in original code was hardcoded. adapting to potentially use config or keep simplicity
+        # For now keeping it simple but cleaner
         if score >= 85: return "PRO 🥇", "text-blue-600"
         if score >= 70: return "ADVANCED 🥈", "text-green-600"
         if score >= 50: return "INTERMEDIATE 🥉", "text-yellow-600"
         return "ROOKIE 🎗️", "text-gray-600"
 
-    def age_adjusted_percentile(self, score, age):
+    def age_adjusted_percentile(self, score: float, age: int) -> int:
         # Semplice logica di percentile basata sull'età
         base = 50
         if age > 30: base += (age - 30) * 0.5
         pct = min(99, (score / 100) * base + 30)
         return int(pct)
+

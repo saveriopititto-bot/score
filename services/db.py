@@ -1,31 +1,36 @@
 from supabase import create_client, Client
 import streamlit as st
+import logging
+from typing import Optional, Dict, List, Any, Tuple
+
+# Setup Logger
+logger = logging.getLogger("sCore.DB")
 
 class DatabaseService:
     def __init__(self, url: str, key: str):
         self.client: Client = create_client(url, key)
 
     # --- GESTIONE PROFILO ---
-    def save_athlete_profile(self, profile_data):
+    def save_athlete_profile(self, profile_data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         try:
             self.client.table("athletes").upsert(profile_data).execute()
             return True, None 
         except Exception as e:
-            print(f"⚠️ Errore salvataggio profilo: {e}")
+            logger.error(f"Error saving profile: {e}")
             return False, str(e)
 
-    def get_athlete_profile(self, athlete_id):
+    def get_athlete_profile(self, athlete_id: int) -> Optional[Dict[str, Any]]:
         try:
             res = self.client.table("athletes").select("*").eq("id", athlete_id).execute()
             if res.data and len(res.data) > 0:
                 return res.data[0]
             return None
         except Exception as e:
-            print(f"⚠️ Errore lettura profilo: {e}")
+            logger.error(f"Error reading profile: {e}")
             return None
 
     # --- GESTIONE CORSE (RUNS) ---
-    def save_run(self, run_data, athlete_id):
+    def save_run(self, run_data: Dict[str, Any], athlete_id: int) -> bool:
         """Salva una corsa mappando i dati Python -> SQL Supabase"""
         try:
             # MAPPATURA: Chiavi App -> Colonne SQL
@@ -52,10 +57,10 @@ class DatabaseService:
             self.client.table("runs").upsert(payload).execute()
             return True
         except Exception as e:
-            print(f"Errore DB Save Run: {e}")
+            logger.error(f"Error DB Save Run: {e}")
             return False
 
-    def get_history(self):
+    def get_history(self) -> List[Dict[str, Any]]:
         """Carica lo storico mappando SQL Supabase -> Dati Python"""
         try:
             response = self.client.table("runs").select("*").order("date", desc=True).execute()
@@ -87,19 +92,22 @@ class DatabaseService:
                 })
             return processed
         except Exception as e:
-            print(f"Errore DB Get History: {e}")
+            logger.error(f"Error DB Get History: {e}")
             return []
 
-    def update_ai_feedback(self, run_id, feedback_text):
+    def update_ai_feedback(self, run_id: int, feedback_text: str) -> bool:
         try:
             self.client.table("runs").update({"ai_feedback": feedback_text}).eq("id", run_id).execute()
             return True
         except Exception as e:
+            logger.error(f"Error updating feedback: {e}")
             return False
     
-    def save_feedback(self, feedback_data):
+    def save_feedback(self, feedback_data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         try:
             self.client.table("feedback").insert(feedback_data).execute()
             return True, None
         except Exception as e:
+            logger.error(f"Error saving user feedback: {e}")
             return False, str(e)
+

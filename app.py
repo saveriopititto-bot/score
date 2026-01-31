@@ -5,6 +5,11 @@ from datetime import datetime, timedelta
 
 # --- 1. CONFIG & VALIDATION ---
 from config import Config
+import logging
+
+# Setup Logging
+logger = Config.setup_logging()
+logger.info("Starting sCore App...")
 
 missing_secrets = Config.check_secrets()
 if missing_secrets:
