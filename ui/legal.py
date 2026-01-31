@@ -38,14 +38,13 @@ def render_legal_section():
                 
         with col2:
             st.markdown("**Legale**")
-            st.markdown("[Privacy Policy](https://scorerun.streamlit.app/privacy)")
-            st.markdown("[Terms of Service](https://scorerun.streamlit.app/terms)")
+            st.page_link("pages/privacy.py", label="Privacy Policy", icon="🔒")
+            st.page_link("pages/terms.py", label="Terms of Service", icon="📜")
 
-        #with col3:
-        #    st.markdown("**Risorse**")
-        #    st.markdown("[Home](/)")
-        #    st.markdown("[GitHub 🐙](https://github.com)")
-        #    st.markdown("[Strava 🏃](https://strava.com)")
+        with col3:
+            st.markdown("**Risorse**")
+            st.markdown("[GitHub 🐙](https://github.com)")
+            st.markdown("[Strava 🏃](https://strava.com)")
 
         st.markdown("---")
         st.markdown(f"""
