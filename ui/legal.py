@@ -48,6 +48,5 @@ def render_legal_section():
             st.markdown("[Terms of Service](https://scorerun.streamlit.app/terms)")
 
         st.markdown("---")
-        st.caption(f"© {year} Progetto indipendente sviluppato in Python. All rights reserved &middot; 
-                                sCore Lab {year} Non è uno strumento medico. Interpreta i dati con consapevolezza.")
+        st.caption(f"© {year} Progetto indipendente sviluppato in Python. All rights reserved &middot; sCore Lab {year} Non è uno strumento medico. Interpreta i dati con consapevolezza.")
         st.markdown('</div>', unsafe_allow_html=True)
