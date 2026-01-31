@@ -202,23 +202,30 @@ def apply_custom_style():
             button[kind="primary"]:hover { transform: none !important; }
         }
         /* ========================================================= */
-        /* 7. PRO FOOTER STYLES */
+        /* 7. PRO FOOTER STYLES (Full-Width Breakout) */
         /* ========================================================= */
         
         .footer-container {
-            border-top: 1px solid #E0E0E0;
+            width: 100vw !important;
+            position: relative;
+            left: 50%;
+            right: 50%;
+            margin-left: -50vw !important;
+            margin-right: -50vw !important;
             background-color: #F8F9FA;
-            padding: 40px 20px;
-            margin-top: 50px;
+            border-top: 1px solid #E0E0E0;
+            padding: 60px 0;
+            margin-top: 80px;
             font-family: 'Montserrat', sans-serif;
         }
         
         .footer-grid {
             display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr; /* 4 Colonne: 1 grande (Brand) + 3 piccole */
-            gap: 30px;
-            max-width: 1200px;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 40px;
+            max-width: 1100px; /* Allineato al contenuto main */
             margin: 0 auto;
+            padding: 0 20px;
         }
         
         .footer-col h4 {
@@ -230,15 +237,8 @@ def apply_custom_style():
             letter-spacing: 0.5px;
         }
         
-        .footer-col ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        
-        .footer-col ul li {
-            margin-bottom: 8px;
-        }
+        .footer-col li { list-style: none; margin-bottom: 8px; }
+        .footer-col ul { padding: 0; margin: 0; }
         
         .footer-col a {
             text-decoration: none;
@@ -248,9 +248,7 @@ def apply_custom_style():
             font-weight: 500;
         }
         
-        .footer-col a:hover {
-            color: #E67E22; /* Arancio al passaggio */
-        }
+        .footer-col a:hover { color: #E67E22; }
         
         .footer-brand p {
             font-size: 0.8rem;
@@ -260,21 +258,25 @@ def apply_custom_style():
         }
 
         .footer-bottom {
-            margin-top: 40px;
-            padding-top: 20px;
+            margin-top: 50px;
+            padding: 30px 20px 0 20px;
             border-top: 1px solid #E0E0E0;
             text-align: center;
             font-size: 0.75rem;
             color: #B2BEC3;
+            max-width: 1100px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         /* Mobile Responsive */
         @media (max-width: 768px) {
             .footer-grid {
-                grid-template-columns: 1fr; /* Una colonna su mobile */
+                grid-template-columns: 1fr;
                 text-align: center;
                 gap: 40px;
             }
+            .footer-container { padding: 40px 0; }
         }
         </style>
     """, unsafe_allow_html=True)
