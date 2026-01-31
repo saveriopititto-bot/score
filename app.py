@@ -17,6 +17,9 @@ if missing_secrets:
     st.stop()
 
 # --- 2. IMPORT MODULI ---
+import importlib
+import engine.core
+importlib.reload(engine.core)
 from engine.core import ScoreEngine, RunMetrics
 from services.api import StravaService, WeatherService, AICoachService
 from services.db import DatabaseService
@@ -326,6 +329,13 @@ else:
 
             wr_pct_val = cur_run.get('WR_Pct', 0.0)
             eng = ScoreEngine()
+            
+            # --- DEBUG TEMPORANEO (Rimuovere dopo test) ---
+            if st.checkbox("Mostra Debug Engine", value=True):
+                 st.write(f"Has gaming_feedback: {hasattr(eng, 'gaming_feedback')}")
+                 st.write(f"Has run_quality: {hasattr(eng, 'run_quality')}")
+                 st.write("Dir:", dir(eng))
+            # ----------------------------------------------
 
             st.divider()
 
