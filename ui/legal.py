@@ -1,73 +1,33 @@
 import streamlit as st
 from datetime import datetime
+from pages import privacy, terms
 
 def render_legal_section():
     year = datetime.now().year
     
-    # HTML Puro per layout perfetto
-    st.markdown(f"""
-<div class="footer-container">
-    <div class="footer-grid">
+    st.divider()
+    
+    # Grid minimale con Streamlit native
+    col1, col2, col3 = st.columns([2, 1, 1])
+    
+    with col1:
+        st.markdown(f"### sCore Lab v1.0")
+        st.caption(f"© {year} Progetto indipendente sviluppato in Python.")
+        st.info("⚠️ Non è uno strumento medico. Interpreta i dati con consapevolezza.")
         
-        <div class="footer-col footer-brand">
-            <h3 style="margin:0; color:#2D3436;">sCore Lab</h3>
-            <p>
-                <strong>Versione 1.0</strong> &middot; {year}<br>
-                SCORE nasce per aiutare i runner a comprendere meglio i propri allenamenti, 
-                privilegiando la qualità dello sforzo e la sostenibilità.
-            </p>
-            <div style="margin-top: 15px;">
-                <a href="#" style="font-size: 1.2rem; margin-right: 10px;">GitHub 🐙</a>
-                <a href="#" style="font-size: 1.2rem;">Strava 🏃</a>
-            </div>
-        </div>
+    with col2:
+        st.markdown("**Risorse**")
+        st.page_link("app.py", label="Home", icon="🏠")
+        st.markdown("[GitHub 🐙](https://github.com)")
+        st.markdown("[Strava 🏃](https://strava.com)")
 
-        <div class="footer-col">
-            <h4>Prodotto</h4>
-            <ul>
-                <li><a href="#">Funzionalità</a></li>
-                <li><a href="#">Roadmap</a></li>
-                <li><a href="#">Engine 4.1</a></li>
-                <li><a href="#">Changelog</a></li>
-                <li><a href="#">Demo Mode</a></li>
-            </ul>
-        </div>
+    with col3:
+        st.markdown("**Legale**")
+        if st.button("Privacy Policy"):
+            st.info("Sezione in fase di caricamento...")
+            privacy.show()
+        if st.button("Terms of Service"):
+            terms.show()
 
-        <div class="footer-col">
-            <h4>Risorse</h4>
-            <ul>
-                <li><a href="#">Guida Introduttiva</a></li>
-                <li><a href="#">Metodo sCore</a></li>
-                <li><a href="#">Calcolatore Zone</a></li>
-                <li><a href="#">Glossario Metriche</a></li>
-                <li><a href="#">Supporto</a></li>
-            </ul>
-        </div>
-
-        <div class="footer-col">
-            <h4>Legale</h4>
-            <ul>
-                <li><a href="#">Termini di Servizio</a></li>
-                <li><a href="#">Privacy Policy</a></li>
-                <li><a href="#">Cookie Policy</a></li>
-            </ul>
-            
-            <h4 style="margin-top: 20px;">Lingua</h4>
-            <ul>
-                <li><a href="#">🇮🇹 Italiano</a></li>
-                <li><a href="#">🇬🇧 English (Coming Soon)</a></li>
-            </ul>
-        </div>
-        
-    </div>
-
-    <div class="footer-bottom">
-        <p>
-            SCORE è un progetto indipendente sviluppato in Python.<br>
-            <em>Non è uno strumento medico e non sostituisce il parere di un professionista. 
-            I dati vanno interpretati insieme alle sensazioni personali.</em>
-        </p>
-        <p>&copy; {year} sCore Lab. All rights reserved.</p>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown("---")
+    st.caption(f"All rights reserved &middot; {athlete_info_str if 'athlete_info_str' in globals() else ''}")
