@@ -30,4 +30,4 @@ def render_legal_section():
             terms.show()
 
     st.markdown("---")
-    st.caption(f"All rights reserved &middot; {athlete_info_str if 'athlete_info_str' in globals() else ''}")
+    st.caption(f"All rights reserved &middot; sCore Lab {year}")
