@@ -403,102 +403,123 @@ else:
                     elif dec_val > 3.0: dec_color = "#F59E0B" # Amber
 
                     st.markdown(f"""
-                    <style>
-                        /* Container per gestire l'hover */
-                        .drift-container {{
-                            position: relative;
-                            width: 160px; /* Un po' più largo del cerchio (140px) */
-                            height: 160px;
-                            margin: 0 auto;
-                            display: flex; /* Flex per centrare il contenuto */
-                            justify-content: center;
-                            align-items: center;
-                        }}
+<style>
+    /* Container */
+    .drift-container {{
+        position: relative;
+        width: 160px;
+        height: 160px;
+        margin: 0 auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }}
 
-                        /* Il Cerchio Drift */
-                        .drift-circle {{
-                            width: 140px;
-                            height: 140px;
-                            border-radius: 50%;
-                            border: 4px solid {dec_color};
-                            background: white;
-                            display: flex;
-                            flex-direction: column;
-                            align-items: center;
-                            justify-content: center;
-                            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
-                            z-index: 10;
-                            transition: transform 0.3s ease;
-                        }}
-                        
-                        .drift-container:hover .drift-circle {{
-                            transform: scale(0.95); /* Piccolo feedback press */
-                        }}
+    /* Cerchio Drift = UNICO TRIGGER */
+    .drift-circle {{
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        border: 4px solid {dec_color};
+        background: white;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+        z-index: 10;
+        cursor: pointer;
+        transition: transform 0.25s ease;
+    }}
 
-                        /* Elementi della Legenda (nascosti di default) */
-                        .legend-item {{
-                            position: absolute;
-                            top: 50%;
-                            left: 50%;
-                            transform: translate(-50%, -50%) scale(0); /* Partono dal centro */
-                            opacity: 0;
-                            background: white;
-                            padding: 6px 10px;
-                            border-radius: 12px;
-                            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-                            font-size: 0.65rem;
-                            font-weight: 600;
-                            white-space: nowrap;
-                            z-index: 5;
-                            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Effetto rimbalzo */
-                            pointer-events: none; /* Evita flicker se mouse sopra */
-                        }}
+    .drift-circle:hover {{
+        transform: scale(0.95);
+    }}
 
-                        /* Posizioni finali "A Ventaglio" (verso destra) */
-                        .drift-container:hover .item-1 {{
-                            transform: translate(70px, -70px) scale(1);
-                            opacity: 1;
-                        }}
-                        .drift-container:hover .item-2 {{
-                            transform: translate(90px, -30px) scale(1);
-                            opacity: 1;
-                        }}
-                        .drift-container:hover .item-3 {{
-                            transform: translate(90px, 15px) scale(1);
-                            opacity: 1;
-                        }}
-                        .drift-container:hover .item-4 {{
-                            transform: translate(70px, 60px) scale(1);
-                            opacity: 1;
-                        }}
-                        
-                        /* Indicatori colorati nei label */
-                        .dot {{ display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px; }}
-                    </style>
+    /* Legend items – stato latente */
+    .legend-item {{
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.85);
+        opacity: 0.8;
 
-                    <div class="drift-container">
-                        <!-- Cerchio Principale -->
-                        <div class="drift-circle">
-                            <span style="color: #999; font-size: 0.65rem; font-weight: 700;">DRIFT</span>
-                            <span style="color: {dec_color}; font-size: 2.2rem; font-weight: 800; line-height: 1;">{dec_val}%</span>
-                            <div style="background:{dec_color}22; color:{dec_color}; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">EFFICIENCY</div>
-                        </div>
+        background: white;
+        padding: 6px 10px;
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        font-size: 0.65rem;
+        font-weight: 600;
+        white-space: nowrap;
+        z-index: 5;
 
-                        <!-- Elementi "Ventaglio" -->
-                        <div class="legend-item item-1" style="border-left: 3px solid #10B981;">
-                            <span class="dot" style="background:#10B981;"></span>&lt;3%: Eccellente
-                        </div>
-                        <div class="legend-item item-2" style="border-left: 3px solid #F59E0B;">
-                            <span class="dot" style="background:#F59E0B;"></span>3-5%: Buono
-                        </div>
-                        <div class="legend-item item-3" style="border-left: 3px solid #EF4444;">
-                            <span class="dot" style="background:#EF4444;"></span>&gt;5%: Attenzione
-                        </div>
-                        <div class="legend-item item-4" style="border-left: 3px solid #991B1B;">
-                            <span class="dot" style="background:#991B1B;"></span>&gt;10%: Critico
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+        pointer-events: none;
+
+        transition:
+            transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1),
+            opacity 0.25s ease;
+    }}
+
+    /* Micro-delay progressivo */
+    .item-1 {{ transition-delay: 0ms; }}
+    .item-2 {{ transition-delay: 40ms; }}
+    .item-3 {{ transition-delay: 80ms; }}
+    .item-4 {{ transition-delay: 120ms; }}
+
+    /* Apertura A VENTAGLIO – SOLO hover sul cerchio */
+    .drift-circle:hover ~ .item-1 {{
+        transform: translate(70px, -70px) scale(1);
+        opacity: 1;
+    }}
+
+    .drift-circle:hover ~ .item-2 {{
+        transform: translate(90px, -30px) scale(1);
+        opacity: 1;
+    }}
+
+    .drift-circle:hover ~ .item-3 {{
+        transform: translate(90px, 15px) scale(1);
+        opacity: 1;
+    }}
+
+    .drift-circle:hover ~ .item-4 {{
+        transform: translate(70px, 60px) scale(1);
+        opacity: 1;
+    }}
+
+    /* Pallino */
+    .dot {{
+        display:inline-block;
+        width:6px;
+        height:6px;
+        border-radius:50%;
+        margin-right:4px;
+    }}
+</style>
+
+<div class="drift-container">
+    <div class="drift-circle">
+        <span style="color:#999;font-size:0.65rem;font-weight:700;">DRIFT</span>
+        <span style="color:{dec_color};font-size:2.2rem;font-weight:800;line-height:1;">{dec_val}%</span>
+        <div style="background:{dec_color}22;color:{dec_color};padding:2px 10px;border-radius:15px;font-size:0.6rem;font-weight:700;margin-top:3px;">
+            EFFICIENCY
+        </div>
+    </div>
+
+    <div class="legend-item item-1" style="border-left:3px solid #10B981;">
+        <span class="dot" style="background:#10B981;"></span>&lt;3%: Eccellente
+    </div>
+    <div class="legend-item item-2" style="border-left:3px solid #F59E0B;">
+        <span class="dot" style="background:#F59E0B;"></span>3–5%: Buono
+    </div>
+    <div class="legend-item item-3" style="border-left:3px solid #EF4444;">
+        <span class="dot" style="background:#EF4444;"></span>&gt;5%: Attenzione
+    </div>
+    <div class="legend-item item-4" style="border-left:3px solid #991B1B;">
+        <span class="dot" style="background:#991B1B;"></span>&gt;10%: Critico
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
