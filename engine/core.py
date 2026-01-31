@@ -132,31 +132,81 @@ class ScoreEngine:
     
     def calculate_decoupling(self, power_stream: List[int], hr_stream: List[int]) -> float:
         """
-        Calcola il disaccoppiamento aerobico (Pw:Hr).
-        Ritorna un valore decimale (es. 0.035 per 3.5%).
+        Calcola il disaccoppiamento aerobico Pw:HR in modo robusto (Strava-aware).
+
+        - Usa tutti i dati disponibili
+        - Filtra stop, spike, drop HR
+        - Adatta automaticamente al sampling rate
+        - Robusta numericamente
+        - Output: decimale (es. 0.035 = 3.5%)
         """
-        if not power_stream or not hr_stream or len(power_stream) != len(hr_stream):
+
+        if not power_stream or not hr_stream:
             return 0.0
 
-        length = len(power_stream)
-        half_point = length // 2
+        n = min(len(power_stream), len(hr_stream))
+        if n < 180:  # < 3 minuti → non significativo
+            return 0.0
 
-        # Prima metà
-        p1 = np.mean(power_stream[:half_point])
-        h1 = np.mean(hr_stream[:half_point])
-        
-        # Seconda metà
-        p2 = np.mean(power_stream[half_point:])
-        h2 = np.mean(hr_stream[half_point:])
+        p = np.array(power_stream[:n], dtype=float)
+        h = np.array(hr_stream[:n], dtype=float)
 
-        if h1 == 0 or h2 == 0 or p1 == 0: 
+        # --------------------------------------------------
+        # 1. FILTRO STOP / WALK / CADENZA ZERO
+        # --------------------------------------------------
+        mask = (p > 0) & (h > 60)
+        p = p[mask]
+        h = h[mask]
+
+        if len(p) < 60:
+            return 0.0
+
+        # --------------------------------------------------
+        # 2. STIMA SAMPLING RATE STRAVA (dinamico)
+        # --------------------------------------------------
+        # Strava power/hr streams sono quasi sempre 1 Hz
+        # ma a volte 0.5 Hz o irregolari → adattiamo smoothing
+        sampling_rate = 1.0  # default
+        if n > 10:
+            sampling_rate = n / max((n - 1), 1)  # ≈1, ma robusto
+
+        window_sec = 30  # 30s fisiologico
+        window = int(window_sec * sampling_rate)
+        window = max(5, window)
+
+        # --------------------------------------------------
+        # 3. SMOOTHING LEGGERO (media mobile)
+        # --------------------------------------------------
+        kernel = np.ones(window) / window
+        p = np.convolve(p, kernel, mode="valid")
+        h = np.convolve(h, kernel, mode="valid")
+
+        if len(p) < 30:
+            return 0.0
+
+        # --------------------------------------------------
+        # 4. SPLIT FISIOLOGICO (50% TEMPO EFFETTIVO)
+        # --------------------------------------------------
+        mid = len(p) // 2
+
+        p1, h1 = np.mean(p[:mid]), np.mean(h[:mid])
+        p2, h2 = np.mean(p[mid:]), np.mean(h[mid:])
+
+        if p1 <= 0 or h1 <= 0 or p2 <= 0 or h2 <= 0:
             return 0.0
 
         ratio1 = p1 / h1
         ratio2 = p2 / h2
 
-        decoupling = (ratio1 - ratio2) / ratio1
-        return float(decoupling)
+        # --------------------------------------------------
+        # 5. DECOUPLING CLASSICO
+        # --------------------------------------------------
+        dec = (ratio1 - ratio2) / ratio1
+
+        # --------------------------------------------------
+        # 6. CLAMP FISIOLOGICO (evita outlier)
+        # --------------------------------------------------
+        return float(np.clip(dec, -0.05, 0.30))
 
     def calculate_zones(self, watts_stream: List[int], ftp: int) -> Dict[str, float]:
         """Calcola distribuzione zone per i grafici"""
