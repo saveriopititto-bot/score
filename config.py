@@ -105,5 +105,6 @@ class Config:
     SCORE_BETA = 3.0
     SCORE_GAMMA = 2.0
     SCORE_W_REF = 6.0
+    W_REF = 6.0
 
 
