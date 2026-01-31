@@ -54,7 +54,7 @@ def render_dashboard(auth_svc, db_svc):
         with st.spinner(f"Analisi attività Strava con Engine {Config.ENGINE_VERSION}..."):
             bar = st.progress(0)
             count, msg = ctrl.run_sync(
-                token, athlete_id, phys_params, days_back, 
+                token, athlete_id, phys_params, days_to_fetch, 
                 existing_ids, scores_asc, progress_bar=bar,
                 last_import_timestamp=last_import_timestamp
             )
