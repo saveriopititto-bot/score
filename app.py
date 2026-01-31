@@ -404,25 +404,52 @@ else:
 
                     st.markdown(f"""
                     <div style="display: flex; justify-content: center;">
-                        <div class="stat-circle" style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #F3F4F6; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
-                            <span style="color: #999; font-size: 0.65rem; font-weight: 700;">EFFICIENCY</span>
+                        <div class="stat-circle" style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid {dec_color}; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
+                            <span style="color: #999; font-size: 0.65rem; font-weight: 700;">DRIFT</span>
                             <span style="color: {dec_color}; font-size: 2.2rem; font-weight: 800; line-height: 1;">{dec_val}%</span>
-                            <div style="background:{dec_color}22; color:{dec_color}; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">DRIFT</div>
+                            <div style="background:{dec_color}22; color:{dec_color}; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">EFFICIENCY</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
+                    
+                    # Custom Legend
+                    st.markdown(f"""
+                    <div style="margin-top: 15px; font-size: 0.75rem; color: #666; width: 100%;">
+                        <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                            <span style="width: 8px; height: 8px; background-color: #10B981; border-radius: 50%; margin-right: 6px;"></span>
+                            <b>&lt; 3%</b>: Eccellente (Macchina aerobica)
+                        </div>
+                        <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                            <span style="width: 8px; height: 8px; background-color: #F59E0B; border-radius: 50%; margin-right: 6px;"></span>
+                            <b>3-5%</b>: Buono (Fit)
+                        </div>
+                         <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                            <span style="width: 8px; height: 8px; background-color: #EF4444; border-radius: 50%; margin-right: 6px;"></span>
+                            <b>&gt; 5%</b>: Attenzione (Deriva)
+                        </div>
+                         <div style="display: flex; align-items: center;">
+                            <span style="width: 8px; height: 8px; background-color: #991B1B; border-radius: 50%; margin-right: 6px;"></span>
+                            <b>&gt; 10%</b>: Critico (Bonking)
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
                 details = cur_run.get("SCORE_DETAIL") or {}
                 
-                k1, k2, k3, k4, k5, k6 = st.columns(6)
+                # k1, k2, k3, k4, k5, k6 = st.columns(6)
+                # MOD: Teniamo solo Percentile e Trend (Target?), nascondiamo il resto
+                
+                c_k1, c_k2 = st.columns(2)
+                with c_k1: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
+                with c_k2: st.metric("Percentile", f"{cur_run.get('WR_Pct', 0)}%", "Reale")
 
-                with k1: st.metric("Efficienza", f"{cur_run['Decoupling']}%", "Drift")
-                with k2: st.metric("Potenza", f"{cur_run['Power']}w", f"{cur_run['Meteo']}")
-                with k3: st.metric("Target", f"{details.get('Target', 'N/A')}", "Tempo Rif.")
-                with k4: st.metric("WCF Meteo", f"{cur_run.get('WCF', 1.0)}", "Factor")
-                with k5: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
-                with k6: st.metric("Percentile", f"{cur_run.get('WR_Pct', 0)}%", "Reale")
+                # with k1: st.metric("Efficienza", f"{cur_run['Decoupling']}%", "Drift")
+                # with k2: st.metric("Potenza", f"{cur_run['Power']}w", f"{cur_run['Meteo']}")
+                # with k3: st.metric("Target", f"{details.get('Target', 'N/A')}", "Tempo Rif.")
+                # with k4: st.metric("WCF Meteo", f"{cur_run.get('WCF', 1.0)}", "Factor")
+                # with k5: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
+                # with k6: st.metric("Percentile", f"{cur_run.get('WR_Pct', 0)}%", "Reale")
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
