@@ -284,7 +284,93 @@ else:
             wr_pct_val = cur_run.get('WR_Pct', 0.0)
             eng = ScoreEngine()
 
-            # --- A. METRICHE PRINCIPALI (Sempre Visibili) ---
+            # --- A. STRUMENTI (In Alto) ---
+            t_lab, t_prof = st.tabs(["🔬 Laboratorio Analisi", "👤 Parametri Profilo"])
+
+            with t_lab:
+                st.markdown("### 🔬 Grafici & AI")
+                if len(df) > 1:
+                    render_trend_chart(df.head(60))
+                    st.divider()
+
+                opts = {r['id']: f"{r['Data'].strftime('%Y-%m-%d')} - {r['Dist (km)']}km" for i, r in df.iterrows()}
+                sel = st.selectbox("Analizza nel dettaglio:", list(opts.keys()), format_func=lambda x: opts[x])
+                run = df[df['id'] == sel].iloc[0].to_dict()
+                
+                c_ai, c_ch = st.columns([1, 2], gap="medium")
+                with c_ai:
+                    st.markdown("##### 🤖 Coach AI")
+                    existing_feedback = run.get('ai_feedback')
+                    if existing_feedback:
+                        st.markdown(existing_feedback)
+                    else:
+                        if gemini_key:
+                            if st.button("✨ Genera Analisi AI", type="primary"):
+                                with st.spinner("Il Coach sta studiando i tuoi dati..."):
+                                    coach = AICoachService(gemini_key)
+                                    zones_calc = ScoreEngine().calculate_zones(run.get('raw_watts', []), ftp)
+                                    feedback = coach.get_feedback(run, zones_calc)
+                                    st.markdown(feedback)
+                                    if not st.session_state.demo_mode:
+                                        db_svc.update_ai_feedback(run['id'], feedback)
+                        else: st.info("AI Key non configurata.")
+                    st.metric("Disaccoppiamento (Drift)", f"{run['Decoupling']}%")
+
+                with c_ch:
+                    render_scatter_chart(run.get('raw_watts', []), run.get('raw_hr', []))
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    zones_c = ScoreEngine().calculate_zones(run.get('raw_watts', []), ftp)
+                    render_zones_chart(zones_c)
+                
+                st.divider()
+                st.markdown("### 📂 Archivio & Dettagli")
+                with st.expander("Perché questo punteggio? (Breakdown)", expanded=False):
+                    details = cur_run.get("SCORE_DETAIL")
+                    if not details or not isinstance(details, dict):
+                         m_tmp = RunMetrics(cur_run['Power'], cur_run['HR'], cur_run['Dist (km)']*1000, 0, 0, weight, hr_max, hr_rest, 20, 50)
+                         _, details, _, _ = eng.compute_score(m_tmp, cur_run['Decoupling']/100)
+                    d1, d2, d3, d4 = st.columns(4)
+                    with d1: st.metric("🚀 Potenza", f"+{details.get('Potenza', 0)}%")
+                    with d2: st.metric("🔋 Volume", f"+{details.get('Volume', 0)}%")
+                    with d3: st.metric("💓 Intensità", f"+{details.get('Intensità', 0)}%")
+                    with d4: st.metric("📉 Efficienza", f"{details.get('Malus Efficienza', 0)}")
+                
+                with st.expander("📂 Archivio Attività Completo", expanded=False):
+                    render_history_table(df)
+
+            with t_prof:
+                st.markdown(f"#### Benvenuto, {athlete_name}")
+                st.markdown(f"""<div style="background: white; padding: 15px; border-radius: 12px; border: 1px solid #eee; margin-bottom: 20px;"><small style="color: #888;">ID Atleta Strava: {ath.get('id', 'N/A')}</small></div>""", unsafe_allow_html=True)
+                
+                with st.expander("⚙️ Modifica profilo atleta", expanded=False):
+                    st.markdown("""<div style="background:#fafafa; padding:20px; border-radius:16px; border:1px solid #eee;">""", unsafe_allow_html=True)
+                    with st.form("athlete_settings"):
+                        c1, c2, c3 = st.columns(3, gap="medium")
+                        with c1:
+                            new_weight = st.number_input("Peso (kg)", value=float(weight), step=0.5)
+                            new_age = st.number_input("Età", value=int(age))
+                        with c2:
+                            new_hr_max = st.number_input("FC Max", value=int(hr_max))
+                            new_hr_rest = st.number_input("FC Riposo", value=int(hr_rest))
+                        with c3:
+                            new_ftp = st.number_input("FTP (W)", value=int(ftp))
+                            new_sex = st.selectbox("Sesso", ["M", "F"], index=0 if sex == "M" else 1)
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.form_submit_button("💾 Salva profilo"):
+                            if not st.session_state.demo_mode:
+                                payload = {"id": int(ath.get("id")), "firstname": str(ath.get("firstname", "")), "lastname": str(ath.get("lastname", "")), "weight": float(new_weight), "hr_max": int(new_hr_max), "hr_rest": int(new_hr_rest), "ftp": int(new_ftp), "age": int(new_age), "sex": str(new_sex), "updated_at": datetime.now().isoformat()}
+                                success, msg = db_svc.save_athlete_profile(payload)
+                                if success:
+                                    st.success("✅ Profilo salvato!"); time.sleep(1); st.rerun()
+                                else: st.error(f"❌ Errore DB: {msg}")
+                    st.markdown("</div>", unsafe_allow_html=True)
+                
+                if zones_data and not saved_profile: st.caption(f"ℹ️ Dati stimati (FTP ~{ftp}W, Età {age}). Clicca Salva per confermare.")
+                elif saved_profile: st.caption("✅ Profilo caricato dal database.")
+
+            st.divider()
+
+            # --- B. DASHBOARD PRO (Principale) ---
             st.markdown("""
             <style>
                 .stat-circle { transition: all 0.3s ease; }
@@ -348,94 +434,9 @@ else:
                     </div>
                 </div>""", unsafe_allow_html=True)
 
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # --- B. STRUMENTI SECONDARI (TAB) ---
-            t_lab, t_prof = st.tabs(["🔬 Laboratorio Analisi", "👤 Parametri Profilo"])
-
-            with t_lab:
-                st.markdown("### 🔍 Analisi Dettagliata")
-                with st.expander("Perché questo punteggio? (Breakdown)", expanded=True):
-                    details = cur_run.get("SCORE_DETAIL")
-                    if not details or not isinstance(details, dict):
-                         m_tmp = RunMetrics(cur_run['Power'], cur_run['HR'], cur_run['Dist (km)']*1000, 0, 0, weight, hr_max, hr_rest, 20, 50)
-                         _, details, _, _ = eng.compute_score(m_tmp, cur_run['Decoupling']/100)
-                    
-                    d1, d2, d3, d4 = st.columns(4)
-                    with d1: st.metric("🚀 Potenza", f"+{details.get('Potenza', 0)}%")
-                    with d2: st.metric("🔋 Volume", f"+{details.get('Volume', 0)}%")
-                    with d3: st.metric("💓 Intensità", f"+{details.get('Intensità', 0)}%")
-                    with d4: st.metric("📉 Efficienza", f"{details.get('Malus Efficienza', 0)}")
-
-                with st.expander("📂 Archivio Attività", expanded=False):
-                    render_history_table(df)
-                    
-                st.divider()
-                st.markdown("### 🔬 Grafici & AI")
-                if len(df) > 1:
-                    render_trend_chart(df.head(60))
-                    st.divider()
-
-                opts = {r['id']: f"{r['Data'].strftime('%Y-%m-%d')} - {r['Dist (km)']}km" for i, r in df.iterrows()}
-                sel = st.selectbox("Analizza nel dettaglio:", list(opts.keys()), format_func=lambda x: opts[x])
-                run = df[df['id'] == sel].iloc[0].to_dict()
-                
-                c_ai, c_ch = st.columns([1, 2], gap="medium")
-                with c_ai:
-                    st.markdown("##### 🤖 Coach AI")
-                    existing_feedback = run.get('ai_feedback')
-                    if existing_feedback:
-                        st.success("Analisi recuperata")
-                        st.markdown(existing_feedback)
-                        if st.button("🔄 Rigenera"): pass 
-                    else:
-                        if gemini_key:
-                            if st.button("✨ Genera Analisi AI", type="primary"):
-                                with st.spinner("Il Coach sta studiando i tuoi dati..."):
-                                    coach = AICoachService(gemini_key)
-                                    zones_calc = ScoreEngine().calculate_zones(run.get('raw_watts', []), ftp)
-                                    feedback = coach.get_feedback(run, zones_calc)
-                                    st.markdown(feedback)
-                                    if not st.session_state.demo_mode:
-                                        db_svc.update_ai_feedback(run['id'], feedback)
-                        else:
-                            st.info("AI Key non configurata.")
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.metric("Disaccoppiamento (Drift)", f"{run['Decoupling']}%")
-
-                with c_ch:
-                    render_scatter_chart(run.get('raw_watts', []), run.get('raw_hr', []))
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    zones_c = ScoreEngine().calculate_zones(run.get('raw_watts', []), ftp)
-                    render_zones_chart(zones_c)
-
-            with t_prof:
-                st.markdown(f"#### Benvenuto, {athlete_name}")
-                st.markdown(f"""
-                <div style="background: white; padding: 15px; border-radius: 12px; border: 1px solid #eee; margin-bottom: 20px;">
-                    <small style="color: #888;">ID Atleta Strava: {ath.get('id', 'N/A')}</small>
-                </div>
-                """, unsafe_allow_html=True)
-                with st.form("athlete_settings"):
-                    c1, c2, c3, c4, c5, c6 = st.columns(6)
-                    with c1: new_weight = st.number_input("Peso (kg)", value=float(weight), step=0.5)
-                    with c2: new_hr_max = st.number_input("FC Max", value=int(hr_max))
-                    with c3: new_hr_rest = st.number_input("FC Riposo", value=int(hr_rest))
-                    with c4: new_ftp = st.number_input("FTP (W)", value=int(ftp))
-                    with c5: new_age = st.number_input("Età", value=int(age))
-                    with c6: new_sex = st.selectbox("Sesso", ["M", "F"], index=0 if sex == "M" else 1)
-                    if st.form_submit_button("💾 Salva Profilo"):
-                        if not st.session_state.demo_mode:
-                            payload = {"id": int(ath.get("id")), "firstname": str(ath.get("firstname", "")), "lastname": str(ath.get("lastname", "")), "weight": float(new_weight), "hr_max": int(new_hr_max), "hr_rest": int(new_hr_rest), "ftp": int(new_ftp), "age": int(new_age), "sex": str(new_sex), "updated_at": datetime.now().isoformat()}
-                            success, msg = db_svc.save_athlete_profile(payload)
-                            if success:
-                                st.success("✅ Profilo salvato!"); time.sleep(1); st.rerun()
-                            else: st.error(f"❌ Errore DB: {msg}")
-                if zones_data and not saved_profile: st.caption(f"ℹ️ Dati stimati (FTP ~{ftp}W, Età {age}). Clicca Salva per confermare.")
-                elif saved_profile: st.caption("✅ Profilo caricato dal database.")
-            
-            # --- FEEDBACK FORM & LEGENDA ---
             st.markdown("<br><br>", unsafe_allow_html=True)
+            
+            # --- C. FEEDBACK & LEGENDA ---
             c_feed, c_leg = st.columns([1, 1], gap="large")
             with c_feed:
                  with st.expander("🐞 Segnala un Bug / Idea", expanded=False):
@@ -450,5 +451,5 @@ else:
                      - <span style="color:#991B1B">●</span> >10% Critico
                      **Percentile:** Confronto con atleti della tua età.
                      """, unsafe_allow_html=True)
-
+            
             render_legal_section()
