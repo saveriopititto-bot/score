@@ -64,11 +64,11 @@ if "code" in st.query_params and not st.session_state.strava_token:
 if not st.session_state.strava_token:
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 1. HERO SECTION (Logo 30% più piccolo, No Slogan, Icone rimosse)
+    # 1. HERO SECTION (Logo 30% più piccolo -> ORA +20%, No Slogan, Icone rimosse)
     _, c_center, _ = st.columns([1, 2, 1])
     with c_center:
-        # Logo più piccolo (width 200px approx)
-        c_img_L, c_img_C, c_img_R = st.columns([1, 1, 1])
+        # Logo più grande (+20% rispetto a prima -> Colonne 1:1.5:1)
+        c_img_L, c_img_C, c_img_R = st.columns([1, 1.5, 1])
         with c_img_C:
              try: st.image("sCore.png", use_container_width=True) 
              except: st.markdown("<h1 style='text-align: center; color: #FFCF96;'>sCore Lab</h1>", unsafe_allow_html=True)
@@ -93,11 +93,6 @@ if not st.session_state.strava_token:
                 st.session_state.demo_mode = True
                 st.session_state.strava_token = {"access_token": "DEMO", "athlete": {"id": 123, "firstname": "Demo", "lastname": "User"}}
                 st.rerun()
-        
-        # Bottone Privacy Minimal Landing
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("⚖️ Privacy Policy & Terms of Service", type="secondary", use_container_width=True):
-            render_legal_section()
 
     st.markdown("<br>", unsafe_allow_html=True) # Separatore minimo, non HR
 
@@ -150,7 +145,10 @@ if not st.session_state.strava_token:
 
     # 3. FOOTER
     st.markdown("<br><br>", unsafe_allow_html=True)
-    render_legal_section()
+    
+    # Bottone Privacy Footer minimal
+    if st.button("⚖️ Privacy Policy & Terms of Service", type="secondary"):
+        render_legal_section()
 
 # --- B. DASHBOARD (Loggato) ---
 else:
@@ -380,9 +378,15 @@ else:
                 prev_ma7 = cur_ma7
                 delta_val = 0
             
-            if delta_val > 0.005: trend_lbl, trend_col = "In Crescita ↗", "normal"
-            elif delta_val < -0.005: trend_lbl, trend_col = "In Calo ↘", "inverse"
-            else: trend_lbl, trend_col = "Stabile →", "off"
+            if delta_val > 0.005: 
+                trend_lbl = "In Crescita ↗"
+                score_color = "#CDFAD5" # Green (Crescita)
+            elif delta_val < -0.005: 
+                trend_lbl = "In Calo ↘"
+                score_color = "#FF8080" # Red (Decrescita)
+            else: 
+                trend_lbl = "Stabile →"
+                score_color = "#FFCF96" # Orange (Statico)
 
             eng = ScoreEngine()
             # Calcolo percentili
@@ -436,37 +440,40 @@ else:
                 </style>
                 """, unsafe_allow_html=True)
 
-                # Layout: Atteso | Percentile (Big) | Drift
-                c_exp, c_today, c_drift = st.columns([1, 2, 1], gap="small", vertical_alignment="center")
+                # Layout: Percentile | Score (Big) | Drift
+                c_pct, c_score, c_drift = st.columns([1, 2, 1], gap="small", vertical_alignment="center")
                 
-                with c_exp:
-                    exp_score = round(cur_run['SCORE_MA_28'], 2)
+                with c_pct:
+                    # LEFT: PERCENTILE (ex Baseline)
+                    # Colore statico o dinamico? Usiamo un neutro o purple light
+                    pct_color = "#E0E0E0"
+                    
                     st.markdown(f"""
                     <div style="display: flex; justify-content: center;">
-                        <div class="stat-circle" style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #FFCF96; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
-                            <span style="color: #999; font-size: 0.65rem; font-weight: 700;">ATTESO</span>
-                            <span style="color: #FF8080; font-size: 2.2rem; font-weight: 800; line-height: 1;">{exp_score}</span>
-                            <div style="background:#FFCF9640; color:#FF8080; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">BASELINE</div>
+                        <div class="stat-circle" style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #F0F0F3; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
+                            <span style="color: #999; font-size: 0.65rem; font-weight: 700;">PERCENTILE</span>
+                            <span style="color: #6C5DD3; font-size: 2.2rem; font-weight: 800; line-height: 1;">{wr_pct_val}%</span>
+                            <div style="background:#6C5DD322; color:#6C5DD3; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">RANKING</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
                 
-                with c_today:
-                    clean_rank = cur_run['Rank'].split('/')[0].strip()
-                    clean_rank_key = clean_rank.split(' ')[0].upper()
-                    rank_color = Config.RANK_COLORS.get(clean_rank_key, "#CDFAD5")
+                with c_score:
+                    # CENTER: SCORE
+                    # Colore basato su Trend
                     
-                    # MODIFICATO: OGGI -> PERCENTILE
+                    clean_rank = cur_run['Rank'].split('/')[0].strip()
+
                     st.markdown(f"""
                     <div class="score-circle-container" style="display: flex; justify-content: center; cursor: pointer;">
                         <div style="position: relative; width: 230px; height: 230px;">
                             <svg class="score-circle-svg" width="230" height="230" style="position: absolute; top:0; left:0; transform: rotate(-90deg);">
                                 <circle cx="115" cy="115" r="110" stroke="#eee" stroke-width="6" fill="white" />
-                                <circle class="progress" cx="115" cy="115" r="110" style="stroke: {rank_color} !important;" />
+                                <circle class="progress" cx="115" cy="115" r="110" style="stroke: {score_color} !important;" />
                             </svg>
                             <div style="position: absolute; top:0; left:0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;">
-                                <span style="color: #999; font-size: 0.9rem; font-weight: 700; letter-spacing: 1px;">PERCENTILE</span>
-                                <span style="color: #2D3436; font-size: 4rem; font-weight: 800; line-height: 0.9;">{wr_pct_val}%</span>
-                                <div style="background:{rank_color}25; color:{rank_color}; border: 1px solid {rank_color}; padding:4px 16px; border-radius:20px; font-size:0.8rem; font-weight: 700; margin-top: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">{clean_rank}</div>
+                                <span style="color: #999; font-size: 0.9rem; font-weight: 700; letter-spacing: 1px;">SCORE</span>
+                                <span style="color: #2D3436; font-size: 5rem; font-weight: 800; line-height: 0.9;">{cur_score}</span>
+                                <div style="background:{score_color}25; color:#555; border: 1px solid {score_color}; padding:4px 16px; border-radius:20px; font-size:0.8rem; font-weight: 700; margin-top: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">{clean_rank}</div>
                             </div>
                         </div>
                     </div>""", unsafe_allow_html=True)
@@ -487,7 +494,7 @@ else:
                          dec_color = "#991B1B"
                          drift_cat = "CRITICO"
 
-                    # NUOVO DRIFT UI: Scritta Circolare (SVG) + Bordo Colorato
+                    # NUOVO DRIFT UI: Zoom resetto, Scritta rimossa
                     st.markdown(f"""
 <style>
     .drift-container {{
@@ -512,32 +519,18 @@ else:
         box-shadow: 0 5px 20px rgba(0,0,0,0.05);
         z-index: 10;
         position: relative;
+        transition: all 0.3s ease;
     }}
-    /* SVG per testo curvo */
-    .drift-text-svg {{
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 160px;
-        height: 160px;
-        pointer-events: none;
-        animation: spin-slow 20s linear infinite;
+    
+    /* Hover ZOOM (come cerchio sinistro, ma ombra ridotta) */
+    .drift-circle:hover {{
+        transform: scale(1.05);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.15); /* Radius ridotto rispetto a 35px */
     }}
-    @keyframes spin-slow {{ from {{ transform: rotate(0deg); }} to {{ transform: rotate(360deg); }} }}
 </style>
 
 <div class="drift-container" style="--drift-color: {dec_color};">
-    <!-- Testo Circolare via SVG -->
-    <svg class="drift-text-svg" viewBox="0 0 160 160">
-        <path id="curve" d="M 20, 80 a 60,60 0 1,1 120,0 a 60,60 0 1,1 -120,0" fill="transparent" />
-        <text width="160" font-family="'Montserrat', sans-serif" font-size="12" font-weight="700" fill="{dec_color}" letter-spacing="2">
-            <textPath href="#curve" startOffset="50%" text-anchor="middle">
-                {drift_cat} • {drift_cat} • {drift_cat} •
-            </textPath>
-        </text>
-    </svg>
-
-    <!-- Cerchio Centrale -->
+    <!-- Cerchio Centrale (Senza testo rotante) -->
     <div class="drift-circle">
         <span style="color:#999;font-size:0.65rem;font-weight:700;">DRIFT</span>
         <span style="color:{dec_color};font-size:2.0rem;font-weight:800;line-height:1;">{dec_val}%</span>
@@ -547,12 +540,8 @@ else:
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # 4. Metriche Extra (solo Trend)
-                # Percentile è già al centro
-                _, c_c = st.columns([1,1]) # Placeholder per allineamento
-                with c_c: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
-
-
+                # RIMOSSO: Metric Trend text-only ("LA SCRITTA CHE STA NEL BOX TREND TOGLILA")
+                
             # === TAB 2: LABORATORIO (SPOSTATO TUTTO QUI) ===
             with t2:
                 # BREAKDOWN E ARCHIVIO SPOSTATI QUI
