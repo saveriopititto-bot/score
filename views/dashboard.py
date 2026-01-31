@@ -6,7 +6,7 @@ from config import Config
 from engine.core import ScoreEngine, RunMetrics
 from controllers.sync_controller import SyncController
 from ui.legal import render_legal_section
-from ui.visuals import render_history_table, render_trend_chart, render_scatter_chart, render_zones_chart, render_quality_badge, render_trend_card, get_coach_feedback
+from ui.visuals import render_history_table, render_trend_chart, render_scatter_chart, render_zones_chart, render_quality_badge, render_trend_card, get_coach_feedback, quality_circle, trend_circle, comparison_circle
 from ui.feedback import render_feedback_form
 
 # Components
@@ -146,45 +146,28 @@ def render_dashboard(auth_svc, db_svc):
             
             if feedback:
                 st.markdown("### 🎮 Performance Feedback")
-                c_qual, c_trend, c_comp = st.columns([1.2, 1.2, 1.6], gap="medium")
                 
-                with c_qual:
+                # Use Stat Circles Layout
+                st.markdown("<br>", unsafe_allow_html=True)
+                c1, c2, c3 = st.columns(3)
+                with c1: st.markdown(quality_circle(feedback.get("quality", {})), unsafe_allow_html=True)
+                with c2: st.markdown(trend_circle(feedback.get("trend", {})), unsafe_allow_html=True)
+                with c3: st.markdown(comparison_circle(feedback.get("comparison", {})), unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # --- Original details/logs kept below ---
+                if feedback.get('achievements'):
+                    with st.expander("🏅 Achievements", expanded=True):
+                        for a in feedback['achievements']:
+                            st.markdown(f"**{a}**")
+                
+                # Debug Log Button preserved in a discreet way
+                with st.expander("⚙️ Feedback Logs"):
+                    st.json(feedback)
                     q = feedback['quality']
                     render_quality_badge(q['label'], q['color'])
                     
-                    if feedback['achievements']:
-                        with st.expander("🏅 Achievements", expanded=True):
-                            for a in feedback['achievements']:
-                                st.markdown(f"**{a}**")
 
-                with c_trend:
-                    tr = feedback.get('trend', {})
-                    # Robust access using .get with default 0.0
-                    delta = tr.get('delta', 0.0)
-                    render_trend_card(delta)
-                    
-                    # Microcopy Coach Feedback
-                    msg = get_coach_feedback("up" if delta > 3 else "down" if delta < -3 else "flat")
-                    st.caption(f"🧠 {msg}")
-                    
-                    # --- DBG LOG BUTTON REQUESTED BY USER ---
-                    with st.popover("⚙️ Logs"):
-                        st.json(tr)
-                        st.write("Full Feedback:", feedback)
-                
-                with c_comp:
-                    cp = feedback['comparison']
-                    if cp:
-                        st.markdown(f"""
-<div class="glass-card">
-<span style="color:#666; font-size:0.8rem; font-weight:700;">VS LAST 10 RUNS</span><br>
-<div style="display:flex; justify-content:space-between; margin-top:5px;">
-<span>Media: <b>{'+' if cp['vs_avg'] > 0 else ''}{cp['vs_avg']}</b></span>
-<span>Best: <b>{'+' if cp['vs_best'] > 0 else ''}{cp['vs_best']}</b></span>
-</div>
-<div style="margin-top:8px; font-size:0.9rem;">Rank: <b>#{cp['rank']}</b> di {cp['total']}</div>
-</div>
-""", unsafe_allow_html=True)
 
             st.divider()
 

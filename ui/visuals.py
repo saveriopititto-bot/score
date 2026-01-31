@@ -62,6 +62,71 @@ def render_trend_card(delta):
 </div>
 """, unsafe_allow_html=True)
 
+def quality_circle(q):
+    # Ensure q is a dict, robust fallback
+    if not isinstance(q, dict):
+         label = str(q) if q else "N/A"
+         color = "#FFCF96"
+    else:
+         label = q.get("label", "N/A").split()[0]
+         label_full = q.get("label", "N/A")
+         
+         color_map = {
+             "LEGENDARY": "#FF8080", "EPIC": "#FFCF96",
+             "GREAT": "#CDFAD5", "SOLID": "#F6FDC3",
+             "OK": "#F6FDC3", "WEAK": "#FFCF96", "WASTED": "#FF8080"
+         }
+         # Try precise match first, then by key
+         color = "#FFCF96"
+         for k,v in color_map.items():
+             if k in label_full: 
+                 color = v
+                 break
+                 
+    return f"""
+    <div style="display:flex; justify-content:center;">
+      <div class="stat-circle" style="width:130px;height:130px;border:5px solid {color};">
+        <span style="font-size:0.65rem;color:#999;font-weight:700;">QUALITY</span>
+        <span style="font-size:1.4rem;font-weight:900;color:{color};line-height:1;">{label}</span>
+      </div>
+    </div>
+    """
+
+def trend_circle(tr):
+    direction = tr.get("direction", "flat")
+    if direction == "up": icon, color = "▲", "#CDFAD5"
+    elif direction == "down": icon, color = "▼", "#FF8080"
+    else: icon, color = "●", "#FFCF96"
+    return f"""
+    <div style="display:flex; justify-content:center;">
+      <div class="stat-circle" style="width:120px;height:120px;border:4px solid {color};">
+        <span style="font-size:2.1rem;font-weight:900;color:{color};">{icon}</span>
+        <span style="font-size:0.65rem;color:#999;">TREND</span>
+      </div>
+    </div>
+    """
+
+def comparison_circle(cp):
+    rank = cp.get("rank", 0)
+    total = cp.get("total", 0)
+    if rank == 0: # No data
+         color = "#F6FDC3"
+         text = "-/-"
+    else:
+         if rank <= 3: color = "#CDFAD5"
+         elif rank <= 7: color = "#F6FDC3"
+         else: color = "#FF8080"
+         text = f"{rank}/{total}"
+         
+    return f"""
+    <div style="display:flex; justify-content:center;">
+      <div class="stat-circle" style="width:120px;height:120px;border:4px solid {color};">
+        <span style="font-size:1.6rem;font-weight:900;color:{color};">{text}</span>
+        <span style="font-size:0.65rem;color:#999;">LAST 10</span>
+      </div>
+    </div>
+    """
+
 # --- CHARTS ---
 
 def _apply_chart_style(chart):

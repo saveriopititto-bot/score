@@ -45,6 +45,48 @@ if "theme" not in st.session_state:
 from ui.style import apply_theme
 apply_theme(st.session_state.theme)
 
+st.markdown("""
+<style>
+:root {
+  --bg-light: #ffffff;
+  --bg-dark: #0f0f0f;
+  --text-light: #2D3436;
+  --text-dark: #eaeaea;
+}
+
+/* Dark mode auto */
+@media (prefers-color-scheme: dark) {
+  .stat-circle {
+    background: var(--bg-dark) !important;
+    color: var(--text-dark);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  }
+}
+
+/* Light mode */
+.stat-circle {
+  background: var(--bg-light);
+  color: var(--text-light);
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: scaleIn 0.45s ease-out;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.stat-circle:hover {
+  transform: scale(1.06);
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.85); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # --- 4. SERVIZI ---
 strava_creds = Config.get_strava_creds()
 supa_creds = Config.get_supabase_creds()
