@@ -24,14 +24,14 @@ def render_legal_section():
         
         with col1:
             titolo = "sCore Lab v1.0"
-            descrizione = "Il nuovo standard per l'analisi della corsa."
+            descrizione = "Powered by <strong>sCorengine 4.1</strong>"
             testo = f"{titolo}<br>{descrizione}"
 
             st.markdown(f"""
             <div style="text-align: center; margin-bottom: 30px;">
                 <p style="color: #636E72; font-size: 1.1rem; margin: 0;">
                     {testo}<br>
-                    Powered by <strong>sCorengine 4.1</strong>
+                    Il nuovo standard per l'analisi della corsa.
                 </p>
             </div>
             """, unsafe_allow_html=True)
