@@ -435,7 +435,7 @@ else:
         align-items: center;
     }}
 
-    /* Cerchio Drift = UNICO TRIGGER */
+    /* Cerchio Drift */
     .drift-circle {{
         width: 140px;
         height: 140px;
@@ -455,111 +455,10 @@ else:
     .drift-circle:hover {{
         transform: scale(0.95);
     }}
-
-    /* Legend items – stato latente */
-    .legend-item {{
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%) scale(0.85);
-        opacity: 0.8;
-
-        background: white;
-        padding: 6px 10px;
-        border-radius: 12px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-        font-size: 0.65rem;
-        font-weight: 600;
-        white-space: nowrap;
-        z-index: 5;
-
-        pointer-events: none;
-
-        transition:
-            transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1),
-            opacity 0.25s ease;
-    }}
-
-    /* Micro-delay progressivo */
-    .item-1 {{ transition-delay: 0ms; }}
-    .item-2 {{ transition-delay: 40ms; }}
-    .item-3 {{ transition-delay: 80ms; }}
-    .item-4 {{ transition-delay: 120ms; }}
-
-    /* Apertura A VENTAGLIO – SOLO hover sul cerchio */
-    .drift-circle:hover ~ .item-1 {{
-        transform: translate(70px, -70px) scale(1);
-        opacity: 1;
-    }}
-
-    .drift-circle:hover ~ .item-2 {{
-        transform: translate(90px, -30px) scale(1);
-        opacity: 1;
-    }}
-
-    .drift-circle:hover ~ .item-3 {{
-        transform: translate(90px, 15px) scale(1);
-        opacity: 1;
-    }}
-
-    .drift-circle:hover ~ .item-4 {{
-        transform: translate(70px, 60px) scale(1);
-        opacity: 1;
-    }}
-
-    /* Pallino */
-    .dot {{
-        display:inline-block;
-        width:6px;
-        height:6px;
-        border-radius:50%;
-        margin-right:4px;
-    }}
     
-    /* RESPONSIVE HARDENING (Drift) */
+    /* RESPONSIVE */
     @media (max-width: 768px) {{
-        .drift-container {{
-            transform: scale(0.9);
-            margin-bottom: 20px;
-        }}
-    }}
-    
-    @media (max-width: 480px) {{
-        .drift-container {{
-             transform: scale(0.8);
-        }}
-    }}
-
-    /* Fallback TOUCH: Mostra lista statica sotto */
-    @media (hover: none) {{
-        .drift-container {{
-            height: auto !important; /* Allow growing */
-            flex-direction: column;
-            width: 100% !important;
-            padding-bottom: 20px;
-        }}
-        
-        /* Reset absolute positioning for items */
-        .legend-item {{
-            position: relative !important;
-            top: auto !important;
-            left: auto !important;
-            transform: none !important;
-            opacity: 1 !important; /* Always visible */
-            margin-top: 8px;
-            width: 80%; /* Full width-ish */
-            text-align: left;
-            box-shadow: none !important;
-            border: 1px solid #eee;
-        }}
-        
-        /* Disable hover fan triggers */
-        .drift-circle:hover ~ .item-1,
-        .drift-circle:hover ~ .item-2,
-        .drift-circle:hover ~ .item-3,
-        .drift-circle:hover ~ .item-4 {{
-             transform: none !important;
-        }}
+        .drift-container {{ transform: scale(0.9); }}
     }}
 </style>
 
@@ -571,19 +470,6 @@ else:
             EFFICIENCY
         </div>
     </div>
-
-    <div class="legend-item item-1" style="border-left:3px solid #10B981;">
-        <span class="dot" style="background:#10B981;"></span>&lt;3%: Eccellente
-    </div>
-    <div class="legend-item item-2" style="border-left:3px solid #F59E0B;">
-        <span class="dot" style="background:#F59E0B;"></span>3–5%: Buono
-    </div>
-    <div class="legend-item item-3" style="border-left:3px solid #EF4444;">
-        <span class="dot" style="background:#EF4444;"></span>&gt;5%: Attenzione
-    </div>
-    <div class="legend-item item-4" style="border-left:3px solid #991B1B;">
-        <span class="dot" style="background:#991B1B;"></span>&gt;10%: Critico
-    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -591,19 +477,9 @@ else:
                 
                 details = cur_run.get("SCORE_DETAIL") or {}
                 
-                # k1, k2, k3, k4, k5, k6 = st.columns(6)
-                # MOD: Teniamo solo Percentile e Trend (Target?), nascondiamo il resto
-                
                 c_k1, c_k2 = st.columns(2)
                 with c_k1: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
                 with c_k2: st.metric("Percentile", f"{cur_run.get('WR_Pct', 0)}%", "Reale")
-
-                # with k1: st.metric("Efficienza", f"{cur_run['Decoupling']}%", "Drift")
-                # with k2: st.metric("Potenza", f"{cur_run['Power']}w", f"{cur_run['Meteo']}")
-                # with k3: st.metric("Target", f"{details.get('Target', 'N/A')}", "Tempo Rif.")
-                # with k4: st.metric("WCF Meteo", f"{cur_run.get('WCF', 1.0)}", "Factor")
-                # with k5: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
-                # with k6: st.metric("Percentile", f"{cur_run.get('WR_Pct', 0)}%", "Reale")
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
@@ -618,6 +494,18 @@ else:
                     with d2: st.metric("🔋 Volume", f"+{details.get('Volume', 0)}")
                     with d3: st.metric("💓 Intensità", f"+{details.get('Intensità', 0)}")
                     with d4: st.metric("📉 Efficienza", f"{details.get('Malus Efficienza', 0)}")
+
+                    # LEGENDA DRIFT SPOSTATA QUI
+                    st.markdown("---")
+                    st.caption("**Legenda Efficienza (Drift):**")
+                    st.markdown("""
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap; font-size: 0.8rem; color: #555;">
+                        <div><span style="color:#10B981;">●</span> &lt;3% Eccellente</div>
+                        <div><span style="color:#F59E0B;">●</span> 3-5% Buono</div>
+                        <div><span style="color:#EF4444;">●</span> &gt;5% Attenzione</div>
+                        <div><span style="color:#991B1B;">●</span> &gt;10% Critico</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                 with st.expander("📂 Archivio Attività", expanded=False):
                     render_history_table(df)
