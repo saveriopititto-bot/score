@@ -408,14 +408,16 @@ else:
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
+                details = cur_run.get("SCORE_DETAIL") or {}
+                
                 k1, k2, k3, k4, k5, k6 = st.columns(6)
 
                 with k1: st.metric("Efficienza", f"{cur_run['Decoupling']}%", "Drift")
                 with k2: st.metric("Potenza", f"{cur_run['Power']}w", f"{cur_run['Meteo']}")
-                with k3: st.metric("Benchmark", f"{cur_run.get('WR_Pct', 0)}%", "vs World Rec")
+                with k3: st.metric("Target", f"{details.get('Target', 'N/A')}", "Tempo Rif.")
                 with k4: st.metric("WCF Meteo", f"{cur_run.get('WCF', 1.0)}", "Factor")
                 with k5: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
-                with k6: st.metric("Percentile", f"{age_pct}%", "By Age")
+                with k6: st.metric("Percentile", f"{cur_run.get('WR_Pct', 0)}%", "Reale")
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 

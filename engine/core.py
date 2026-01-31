@@ -185,19 +185,25 @@ class ScoreEngine:
         p = percentile(dist_label, sex, age, T_act_sec)
 
         # ---- tempo di riferimento dinamico
-        Tref = T_ref(dist_label, age, sex, p, surface, temp_c)
+        # CORREZIONE 1: p0 fissato a 0.70 per il riferimento
+        p0 = 0.70
+        Tref = T_ref(dist_label, age, sex, p0, surface, temp_c)
 
         # ---- performance
         P = Tref / max(T_act_sec, 1)
-        # Nota: utilizzo np.clip come da libreria
+        
         P_eff = np.log(1 + gamma * np.clip(P, 0.6, 1.2))
 
         # ---- potenza efficace
+        # CORREZIONE 2: W_ref da Config
+        W_ref = getattr(Config, "W_REF", 6.0)
         G = ascent / max(distance_m, 1)
-        W_eff = np.log(1 + (W_avg * (1 + G)) / 6.0)
+        W_eff = np.log(1 + (W_avg * (1 + G)) / W_ref)
 
         # ---- HRR robusta
-        HRR = (HR_avg - HR_rest) / max(HR_max - HR_rest, 1)
+        # CORREZIONE 4: Denominatore min 10
+        den = max(HR_max - HR_rest, 10)
+        HRR = (HR_avg - HR_rest) / den
         HRR = np.clip(HRR, 0.30, 0.95)
         HRR_eff = np.log(1 + beta * HRR)
 
@@ -209,6 +215,8 @@ class ScoreEngine:
         )
 
         # ---- stabilità
+        # CORREZIONE 3: D positivo
+        D = max(0.0, D)
         stability = np.exp(-alpha * np.sqrt(D / max(T_hours, 1e-6)))
 
         # ---- SCORE finale
@@ -264,10 +272,18 @@ class ScoreEngine:
             wr_pct = p * 100
 
             # Costruzione Dettagli per la UI
+            # CORREZIONE 5: Formattazione Ore
+            t_ref_int = int(t_ref)
+            h = int(t_ref_int // 3600)
+            m = int((t_ref_int % 3600) // 60)
+            s = int(t_ref_int % 60)
+            t_ref_fmt = f"{h}:{m:02d}:{s:02d}" if h > 0 else f"{m}:{s:02d}"
+
             details = {
                 "Potenza": round(w_kg * 10, 1),           # Proxy visivo
                 "Volume": round(t_hours * 10, 1),         # Proxy visivo
                 "Intensità": round(m.avg_hr / m.hr_max * 100, 0),
+                "Target": t_ref_fmt,
                 "Malus Efficienza": f"-{round(abs(decoupling_decimal * 100), 1)}%" if decoupling_decimal > 0.05 else "OK"
             }
 
