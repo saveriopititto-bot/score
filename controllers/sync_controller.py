@@ -28,6 +28,9 @@ class SyncController:
                 pass
             return -1, "Nessuna attività trovata"
 
+        # FIX ORDER: Strava returns Newest-First. We need Oldest-First for Gaming History to work correctly.
+        activities_list.sort(key=lambda x: x['start_date_local'])
+
         count_new = 0
         total = len(activities_list)
         
