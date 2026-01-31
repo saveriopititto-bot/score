@@ -106,6 +106,23 @@ def render_dashboard(auth_svc, db_svc):
 
             # --- MIDDLE SECTION: METRICHE PRINCIPALI (KPI) ---
             render_kpi_grid(cur_run, score_color)
+
+            # --- DEBUG LOGS FOR SCORE FORMULA ---
+            with st.expander("⚙️ Score Process Logs (Debug Fomula)", expanded=False):
+                st.write("**Dati Corsa (Input)**")
+                st.json({
+                    "Date": str(cur_run['Data']),
+                    "Distance": cur_run['Dist (km)'],
+                    "Power (Avg)": cur_run['Power'],
+                    "HR (Avg)": cur_run['HR'],
+                    "Drift (Decoupling)": cur_run['Decoupling'],
+                    "Weight": phys_params.get('weight'),
+                    "Age": phys_params.get('age')
+                })
+                st.write("**Dettagli Calcolo Score**")
+                st.json(cur_run.get('SCORE_DETAIL', {}))
+                st.write("**Raw Row Data**")
+                st.json(cur_run.to_dict())
             
             st.divider()
 
