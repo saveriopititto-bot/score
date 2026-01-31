@@ -266,18 +266,30 @@ else:
                         dec = eng.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
                         score, details, wcf, wr_pct, quality = eng.compute_score(m, dec)
                         rnk, _ = eng.get_rank(score)
+                        
+                        # Storico score per gaming feedback
+                        history_scores = [r["SCORE"] for r in st.session_state.data]
+                        scores_all = history_scores + [score]
+                        gaming = eng.gaming_feedback(scores_all)
+                        
                         run_obj = {
                             "id": s['id'], "Data": dt.strftime("%Y-%m-%d"), "Dist (km)": round(m.distance_meters/1000, 2),
                             "Power": int(m.avg_power), "HR": int(m.avg_hr), "Decoupling": round(dec*100, 1), 
                             "SCORE": round(score, 2), "WCF": round(wcf, 2), "WR_Pct": round(wr_pct, 1),
-                            "Rank": rnk, "Quality": quality, "Meteo": f"{t}°C", "SCORE_DETAIL": details,
-                            "raw_watts": streams['watts']['data'], "raw_hr": streams['heartrate']['data']
+                            "Rank": rnk, "Meteo": f"{t}°C", "SCORE_DETAIL": details,
+                            "raw_watts": streams['watts']['data'], "raw_hr": streams['heartrate']['data'],
+                            # Gaming Layer
+                            "Quality": gaming["quality"],
+                            "Achievements": gaming["achievements"],
+                            "Trend": gaming["trend"],
+                            "Comparison": gaming["comparison"]
                         }
                         if db_svc.save_run(run_obj, athlete_id): count_new += 1
                     time.sleep(0.1)
                 
                 if count_new > 0:
                     st.success(f"Archiviate {count_new} nuove attività!")
+                    db_svc.update_streak(athlete_id)  # Aggiorna streak persistente
                     st.session_state.data = db_svc.get_history()
                     time.sleep(1); st.rerun()
                 elif len(activities_list) > 0 and count_new == 0:
@@ -383,9 +395,23 @@ else:
             
             st.divider()
 
-            # --- GAMING FEEDBACK LAYER ---
-            scores_hist = df['SCORE'].tolist()[::-1] # Ordine cronologico
-            feedback = eng.gaming_feedback(scores_hist)
+            # --- GAMING FEEDBACK LAYER (from DB, zero ricalcolo) ---
+            cur_quality = cur_run.get("Quality")
+            cur_achievements = cur_run.get("Achievements", [])
+            cur_trend = cur_run.get("Trend", {})
+            cur_comparison = cur_run.get("Comparison", {})
+            
+            # Fallback: ricalcola se DB non ha dati gaming
+            if not cur_quality or not cur_trend:
+                scores_hist = df['SCORE'].tolist()[::-1]
+                feedback = eng.gaming_feedback(scores_hist)
+            else:
+                feedback = {
+                    "quality": {"label": cur_quality, "color": eng.run_quality(cur_run['SCORE'])['color']} if isinstance(cur_quality, str) else cur_quality,
+                    "achievements": cur_achievements,
+                    "trend": cur_trend,
+                    "comparison": cur_comparison
+                }
             
             if feedback:
                 st.markdown("### 🎮 Performance Feedback")

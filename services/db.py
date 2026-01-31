@@ -44,14 +44,19 @@ class DatabaseService:
                 "avg_hr": run_data['HR'],
                 "decoupling": run_data['Decoupling'],
                 "score": run_data['SCORE'],
-                "wcf": run_data['WCF'],       # <--- NUOVO 4.1
-                "wr_pct": run_data['WR_Pct'], # <--- NUOVO 4.1
+                "wcf": run_data['WCF'],
+                "wr_pct": run_data['WR_Pct'],
                 "rank": run_data['Rank'],
                 "meteo_desc": run_data['Meteo'],
+                # Gaming Layer
+                "quality": run_data.get("Quality", {}).get("label"),
+                "achievements": run_data.get("Achievements", []),
+                "trend": run_data.get("Trend", {}),
+                "comparison": run_data.get("Comparison", {}),
                 "raw_data": {
                     "watts": run_data['raw_watts'],
                     "hr": run_data['raw_hr'],
-                    "details": run_data.get('SCORE_DETAIL', {}) # Salviamo i dettagli nel JSON
+                    "details": run_data.get('SCORE_DETAIL', {})
                 }
             }
             self.client.table("runs").upsert(payload).execute()
@@ -80,11 +85,16 @@ class DatabaseService:
                     "HR": row['avg_hr'],
                     "Decoupling": row['decoupling'],
                     "SCORE": row['score'],
-                    "WCF": row.get('wcf', 1.0),       # <--- Fondamentale
-                    "WR_Pct": row.get('wr_pct', 0.0), # <--- Fondamentale
+                    "WCF": row.get('wcf', 1.0),
+                    "WR_Pct": row.get('wr_pct', 0.0),
                     "Rank": row['rank'],
                     "Meteo": row['meteo_desc'],
                     "ai_feedback": row.get('ai_feedback'),
+                    # Gaming Layer
+                    "Quality": row.get("quality"),
+                    "Achievements": row.get("achievements", []),
+                    "Trend": row.get("trend", {}),
+                    "Comparison": row.get("comparison", {}),
                     # Dati complessi
                     "SCORE_DETAIL": raw.get('details', {}),
                     "raw_watts": raw.get('watts', []),
@@ -110,4 +120,29 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error saving user feedback: {e}")
             return False, str(e)
+
+    # --- STREAK PERSISTENTE ---
+    def update_streak(self, athlete_id: int):
+        """Calcola e aggiorna la streak di miglioramento dell'atleta"""
+        try:
+            res = self.client.table("runs")\
+                .select("score")\
+                .eq("athlete_id", athlete_id)\
+                .order("date", desc=True)\
+                .limit(10).execute()
+
+            scores = [r["score"] for r in res.data] if res.data else []
+            streak = 1
+            for i in range(1, len(scores)):
+                if scores[i-1] >= scores[i]:
+                    streak += 1
+                else:
+                    break
+
+            self.client.table("athletes")\
+                .update({"streak": streak})\
+                .eq("id", athlete_id)\
+                .execute()
+        except Exception as e:
+            logger.error(f"Error updating streak: {e}")
 
