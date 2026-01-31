@@ -129,84 +129,58 @@ class RunMetrics:
         self.sex = sex
 
 class ScoreEngine:
+    def __init__(self):
+        self.version = Config.ENGINE_VERSION
     
-    def calculate_decoupling(self, power_stream: List[int], hr_stream: List[int]) -> float:
+    def calculate_decoupling(
+        self,
+        power_stream: List[float],
+        hr_stream: List[float],
+        window_sec: int = 300
+    ) -> float:
         """
-        Calcola il disaccoppiamento aerobico Pw:HR in modo robusto (Strava-aware).
-
-        - Usa tutti i dati disponibili
-        - Filtra stop, spike, drop HR
-        - Adatta automaticamente al sampling rate
-        - Robusta numericamente
-        - Output: decimale (es. 0.035 = 3.5%)
+        Drift robusto (TrainingPeaks-like).
+        Usa smoothing + finestre fisiologiche.
         """
 
-        if not power_stream or not hr_stream:
+        power = np.array(power_stream)
+        hr = np.array(hr_stream)
+
+        # --- pulizia ---
+        mask = (power > 0) & (hr > 0)
+        power = power[mask]
+        hr = hr[mask]
+
+        if len(power) < window_sec * 2:
             return 0.0
 
-        n = min(len(power_stream), len(hr_stream))
-        if n < 180:  # < 3 minuti → non significativo
+        # --- smoothing 30s ---
+        def smooth(x, w=30):
+            if len(x) < w: return x
+            return np.convolve(x, np.ones(w)/w, mode='valid')
+
+        p_s = smooth(power)
+        h_s = smooth(hr)
+
+        n = len(p_s)
+        w = int(window_sec) # cast to int safe
+
+        if n < 2*w:
+             return 0.0
+
+        p_start = np.median(p_s[:w])
+        h_start = np.median(h_s[:w])
+        p_end = np.median(p_s[-w:])
+        h_end = np.median(h_s[-w:])
+
+        if h_start == 0 or h_end == 0 or p_start == 0:
             return 0.0
 
-        p = np.array(power_stream[:n], dtype=float)
-        h = np.array(hr_stream[:n], dtype=float)
+        ratio1 = p_start / h_start
+        ratio2 = p_end / h_end
 
-        # --------------------------------------------------
-        # 1. FILTRO STOP / WALK / CADENZA ZERO
-        # --------------------------------------------------
-        mask = (p > 0) & (h > 60)
-        p = p[mask]
-        h = h[mask]
-
-        if len(p) < 60:
-            return 0.0
-
-        # --------------------------------------------------
-        # 2. STIMA SAMPLING RATE STRAVA (dinamico)
-        # --------------------------------------------------
-        # Strava power/hr streams sono quasi sempre 1 Hz
-        # ma a volte 0.5 Hz o irregolari → adattiamo smoothing
-        sampling_rate = 1.0  # default
-        if n > 10:
-            sampling_rate = n / max((n - 1), 1)  # ≈1, ma robusto
-
-        window_sec = 30  # 30s fisiologico
-        window = int(window_sec * sampling_rate)
-        window = max(5, window)
-
-        # --------------------------------------------------
-        # 3. SMOOTHING LEGGERO (media mobile)
-        # --------------------------------------------------
-        kernel = np.ones(window) / window
-        p = np.convolve(p, kernel, mode="valid")
-        h = np.convolve(h, kernel, mode="valid")
-
-        if len(p) < 30:
-            return 0.0
-
-        # --------------------------------------------------
-        # 4. SPLIT FISIOLOGICO (50% TEMPO EFFETTIVO)
-        # --------------------------------------------------
-        mid = len(p) // 2
-
-        p1, h1 = np.mean(p[:mid]), np.mean(h[:mid])
-        p2, h2 = np.mean(p[mid:]), np.mean(h[mid:])
-
-        if p1 <= 0 or h1 <= 0 or p2 <= 0 or h2 <= 0:
-            return 0.0
-
-        ratio1 = p1 / h1
-        ratio2 = p2 / h2
-
-        # --------------------------------------------------
-        # 5. DECOUPLING CLASSICO
-        # --------------------------------------------------
-        dec = (ratio1 - ratio2) / ratio1
-
-        # --------------------------------------------------
-        # 6. CLAMP FISIOLOGICO (evita outlier)
-        # --------------------------------------------------
-        return float(np.clip(dec, -0.05, 0.30))
+        D = (ratio1 - ratio2) / ratio1
+        return float(max(0.0, D))
 
     def calculate_zones(self, watts_stream: List[int], ftp: int) -> Dict[str, float]:
         """Calcola distribuzione zone per i grafici"""
@@ -268,10 +242,19 @@ class ScoreEngine:
             + max(0, 0.005 * (humidity - 60))
         )
 
-        # ---- stabilità
-        # CORREZIONE 3: D positivo
+        # ---- stabilità (Drift Normalizzato per durata)
+        # CORREZIONE 3: D positivo e scalato
+        # TrainingPeaks style: drift is fully relevant only after significant duration
+        # We apply full penalty only if duration > 45min (0.75h)
+        
         D = max(0.0, D)
-        stability = np.exp(-alpha * np.sqrt(D / max(T_hours, 1e-6)))
+        if T_hours < 0.5:
+             D_eff = 0.0
+        else:
+             D_eff = D * min(1.0, T_hours / 0.75)
+
+        # Use D_eff for penalty calculation instead of raw D
+        stability = np.exp(-alpha * np.sqrt(D_eff / max(T_hours, 1e-6)))
 
         # ---- SCORE finale
         # Apply scaling factor to bring into 0-100 range
@@ -518,4 +501,72 @@ class ScoreEngine:
             "trend": trend,
             "comparison": compare
         }
+    
+    # ============================================================
+    # 4. REPLAY SYSTEM (SCORING V4.2)
+    # ============================================================
+    
+    def replay_score(self, run: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Ricalcola lo score di una corsa esistente usando l'engine corrente (4.2).
+        Non sovrascrive, ritorna il risultato per confronto o salvataggio separato.
+        """
+        try:
+            # Estrazione streams raw (se disponibili nel dizionario)
+            watts = run.get('raw_watts', [])
+            hr = run.get('raw_hr', [])
+            
+            # 1. Ricalcolo Drift 4.2
+            dec = self.calculate_decoupling(watts, hr)
+            
+            # 2. Parametri base
+            # Se run['duration_sec'] non c'è, usa len(watts)
+            if 'duration_sec' in run:
+                dur_sec = run['duration_sec']
+            else:
+                 dur_sec = len(watts) if watts else 3600
+
+            t_hours = dur_sec / 3600.0
+            
+            weight = run.get('weight', Config.DEFAULT_WEIGHT)
+            w_kg = (run.get('avg_power', 0)) / weight if weight > 0 else 0
+            
+            dist_label = run.get('dist_label', "10k") # Dovresti idealmente inferirlo dalla distanza
+            if 'distance_km' in run:
+                d = run['distance_km'] * 1000
+                if d < 8000: dist_label = "5k"
+                elif d < 16000: dist_label = "10k"
+                elif d < 30000: dist_label = "hm"
+                else: dist_label = "m"
+
+            # 3. Calcolo Math
+            score, p, tref, wcf = self.compute_score_4_1_math(
+                W_avg=w_kg,
+                ascent=run.get('elevation', 0),
+                distance_m=run.get('distance_km', 10) * 1000,
+                HR_avg=run.get('avg_hr', 0),
+                HR_rest=run.get('hr_rest', Config.DEFAULT_HR_REST),
+                HR_max=run.get('hr_max', Config.DEFAULT_HR_MAX),
+                T_act_sec=dur_sec,
+                D=dec,
+                T_hours=t_hours,
+                temp_c=run.get('temp', 20),
+                humidity=run.get('humidity', 50),
+                dist_label=dist_label,
+                sex=run.get('sex', 'M'),
+                age=run.get('age', Config.DEFAULT_AGE)
+            )
+            
+            return {
+                "score_version": self.version,
+                "score": score,
+                "decoupling": dec,
+                "wcf": wcf,
+                "percentile": p,
+                "tref_sec": tref
+            }
+
+        except Exception as e:
+            logger.error(f"Replay Error: {e}")
+            return {}
 

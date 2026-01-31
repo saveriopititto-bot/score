@@ -2,6 +2,7 @@ from supabase import create_client, Client
 import streamlit as st
 import logging
 from typing import Optional, Dict, List, Any, Tuple
+from config import Config
 
 # Setup Logger
 logger = logging.getLogger("sCore.DB")
@@ -47,7 +48,9 @@ class DatabaseService:
                 "wcf": run_data['WCF'],
                 "wr_pct": run_data['WR_Pct'],
                 "rank": run_data['Rank'],
+                "rank": run_data['Rank'],
                 "meteo_desc": run_data['Meteo'],
+                "score_version": Config.ENGINE_VERSION,
                 # Gaming Layer
                 "quality": run_data.get("Quality", {}).get("label"),
                 "achievements": run_data.get("Achievements", []),
@@ -146,3 +149,19 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error updating streak: {e}")
 
+    # --- REPLAY & LOGS ---
+    def save_replay(self, replay_data: Dict[str, Any]) -> bool:
+        try:
+            self.client.table("score_replay").insert(replay_data).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Error saving replay: {e}")
+            return False
+
+    def log_achievement(self, log_data: Dict[str, Any]) -> bool:
+        try:
+            self.client.table("achievements_log").insert(log_data).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Error logging achievement: {e}")
+            return False

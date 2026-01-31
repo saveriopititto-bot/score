@@ -6,6 +6,8 @@ class Config:
     APP_ICON = "favicon.png"
     
     # --- ALGORITHM PARAMETERS ---
+    ENGINE_VERSION = "4.2"
+    
     # World Record Benchmark (Elite standard)
     WR_WKG = 6.4 
     
