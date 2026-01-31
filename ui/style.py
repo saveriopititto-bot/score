@@ -201,5 +201,80 @@ def apply_custom_style():
             div[data-testid="stMetric"]:hover { transform: none !important; }
             button[kind="primary"]:hover { transform: none !important; }
         }
+        /* ========================================================= */
+        /* 7. PRO FOOTER STYLES */
+        /* ========================================================= */
+        
+        .footer-container {
+            border-top: 1px solid #E0E0E0;
+            background-color: #F8F9FA;
+            padding: 40px 20px;
+            margin-top: 50px;
+            font-family: 'Montserrat', sans-serif;
+        }
+        
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr; /* 4 Colonne: 1 grande (Brand) + 3 piccole */
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .footer-col h4 {
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #2D3436;
+            margin-bottom: 15px;
+            letter-spacing: 0.5px;
+        }
+        
+        .footer-col ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .footer-col ul li {
+            margin-bottom: 8px;
+        }
+        
+        .footer-col a {
+            text-decoration: none;
+            color: #636E72;
+            font-size: 0.8rem;
+            transition: color 0.2s;
+            font-weight: 500;
+        }
+        
+        .footer-col a:hover {
+            color: #E67E22; /* Arancio al passaggio */
+        }
+        
+        .footer-brand p {
+            font-size: 0.8rem;
+            color: #636E72;
+            line-height: 1.6;
+            margin-top: 10px;
+        }
+
+        .footer-bottom {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #E0E0E0;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #B2BEC3;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .footer-grid {
+                grid-template-columns: 1fr; /* Una colonna su mobile */
+                text-align: center;
+                gap: 40px;
+            }
+        }
         </style>
     """, unsafe_allow_html=True)

@@ -21,7 +21,7 @@ from engine.core import ScoreEngine, RunMetrics
 from services.api import StravaService, WeatherService, AICoachService
 from services.db import DatabaseService
 from ui.style import apply_custom_style
-from ui.legal import render_legal_section, render_colophon
+from ui.legal import render_legal_section
 from ui.visuals import render_history_table, render_trend_chart, render_scatter_chart, render_zones_chart
 from ui.feedback import render_feedback_form
 
@@ -146,9 +146,8 @@ if not st.session_state.strava_token:
     # 3. FOOTER
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # Bottone Privacy Footer minimal
-    if st.button("⚖️ Privacy Policy & Terms of Service", type="secondary"):
-        render_legal_section()
+    # PRO FOOTER
+    render_legal_section()
 
 # --- B. DASHBOARD (Loggato) ---
 else:
@@ -603,29 +602,18 @@ else:
                     zones_c = ScoreEngine().calculate_zones(run.get('raw_watts', []), ftp)
                     render_zones_chart(zones_c)
             
-            # --- FOOTER CARDS ---
-            st.markdown("<br><br><br>", unsafe_allow_html=True)
-            f1, f2, f3 = st.columns(3, gap="medium")
+            # --- FEEDBACK FORM & LEGENDA (Pre-Footer) ---
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            c_feed, c_leg = st.columns([1, 1], gap="large")
             
-            with f1:
-                with st.expander("🐞 Hai un'idea o un Bug?", expanded=False):
+            with c_feed:
+                 with st.expander("🐞 Segnala un Bug / Idea", expanded=False):
                     u_id = ath.get("id")
                     u_name = f"{ath.get('firstname', '')} {ath.get('lastname', '')}"
                     render_feedback_form(db_svc, u_id, u_name)
             
-            with f2:
-                # render_legal_section crea un expander internamente,
-                # ma qui vogliamo controllarlo noi.
-                # Modifichiamo la logica o lo chiamiamo direttamente? 
-                # render_legal_section() crea st.expander direttamente.
-                # Possiamo chiamarlo qui dentro un blocco vuoto? NO, nested expanders forbidden.
-                # Quindi dobbiamo sostituire render_legal_section con il contenuto manuale o chiamarlo FUORI dall'expander.
-                # User asked for "crea tre card... che si aprono".
-                # Metto il contenuto di legal direttamente o chiamo render_legal_section che È una card.
-                render_legal_section() # Questo renderizza già un expander "Privacy & Terms"
-            
-            with f3:
-                with st.expander("ℹ️ Legenda", expanded=False):
+            with c_leg:
+                 with st.expander("ℹ️ Legenda Metriche", expanded=False):
                      st.markdown("""
                      **Efficienza (Drift):**
                      - <span style="color:#10B981">●</span> <3% Eccellente
@@ -637,5 +625,5 @@ else:
                      Confronto con atleti della tua età.
                      """, unsafe_allow_html=True)
 
-            # COLOPHON
-            render_colophon()
+            # --- PRO FOOTER ---
+            render_legal_section()
