@@ -184,7 +184,8 @@ class ScoreEngine:
         ratio2 = p_end / h_end
 
         D = (ratio1 - ratio2) / ratio1
-        return float(max(0.0, D))
+        D = (ratio1 - ratio2) / ratio1
+        return float(D)
 
     def calculate_zones(self, watts_stream: List[int], ftp: int) -> Dict[str, float]:
         """Calcola distribuzione zone per i grafici"""
