@@ -126,15 +126,6 @@ if not st.session_state.strava_token:
         </div>
         """, unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div style="text-align: center; margin-bottom: 30px;">
-        <p style="color: #636E72; font-size: 1.1rem; margin: 0;">
-            Il nuovo standard per l'analisi della corsa.<br>
-            Powered by <strong>sCorengine 4.1</strong>
-        </p>
-    </div>
-""", unsafe_allow_html=True)
-
     # 3. FOOTER
     st.markdown("<br><br>", unsafe_allow_html=True)
     

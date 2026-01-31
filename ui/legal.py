@@ -23,7 +23,19 @@ def render_legal_section():
         col1, col2, col3 = st.columns([2, 1, 1])
         
         with col1:
-            st.markdown(f"### sCore Lab v1.0")
+            titolo = "sCore Lab v1.0"
+            descrizione = "Il nuovo standard per l'analisi della corsa."
+            testo = f"{titolo}<br>{descrizione}"
+
+            st.markdown(f"""
+            <div style="text-align: center; margin-bottom: 30px;">
+                <p style="color: #636E72; font-size: 1.1rem; margin: 0;">
+                    {testo}<br>
+                    Powered by <strong>sCorengine 4.1</strong>
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
             st.caption(f"© {year} Progetto indipendente sviluppato in Python.")
             st.caption("Non è uno strumento medico. Interpreta i dati con consapevolezza.")
             
