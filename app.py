@@ -397,12 +397,17 @@ else:
                     </div>""", unsafe_allow_html=True)
 
                 with c_trend:
+                    dec_val = cur_run.get('Decoupling', 0.0)
+                    dec_color = "#10B981" # Green
+                    if dec_val > 5.0: dec_color = "#EF4444" # Red
+                    elif dec_val > 3.0: dec_color = "#F59E0B" # Amber
+
                     st.markdown(f"""
                     <div style="display: flex; justify-content: center;">
                         <div class="stat-circle" style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #F3F4F6; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
-                            <span style="color: #999; font-size: 0.65rem; font-weight: 700;">TREND</span>
-                            <span style="color: #4B5563; font-size: 2.2rem; font-weight: 800; line-height: 1;">{round(prev_ma7, 2)}</span>
-                            <div style="background:#F3F4F6; color:#4B5563; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">LAST 7D</div>
+                            <span style="color: #999; font-size: 0.65rem; font-weight: 700;">EFFICIENCY</span>
+                            <span style="color: {dec_color}; font-size: 2.2rem; font-weight: 800; line-height: 1;">{dec_val}%</span>
+                            <div style="background:{dec_color}22; color:{dec_color}; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">DRIFT</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
 
