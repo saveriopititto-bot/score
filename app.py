@@ -81,12 +81,13 @@ if not st.session_state.strava_token:
     st.markdown("<br>", unsafe_allow_html=True) 
 
     # 2. IL MANIFESTO
-    manifesto = "Il Metodo sCore<br>Il nuovo standard per l'analisi della corsa."
+    manifesto = "Il Metodo sCore"
 
     st.markdown(f"""
     <div style="text-align: center; margin-bottom: 30px;">
         <h3 style="color: #E67E22; margin-bottom: 10px;">{manifesto}</h3>
         <p style="color: #636E72; font-size: 1.1rem; margin: 0;">
+            Il nuovo standard per l'analisi della corsa.<br>
             Powered by <strong>sCorengine 4.1</strong>
         </p>
     </div>
