@@ -26,3 +26,19 @@ def render_legal_section():
             
         with tab_terms:
             terms.show()    # Chiama la funzione dentro pages/terms.py
+
+def render_colophon():
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    with st.expander("📜 Info Progetto & Colophon (v1.0)", expanded=False):
+        st.markdown("""
+        <div style="font-size: 0.9rem; color: #555;">
+            <p><strong>SCORE – Running Performance · 2026</strong></p>
+            <p>Nato per aiutare i runner a privilegiare la qualità e la sostenibilità, 
+            non solo la performance pura.</p>
+            <p><strong>Tecnologia:</strong> Sviluppato in Python con un approccio essenziale.</p>
+            <p><strong>Metodo:</strong> Analisi multi-segnale (Power, HR, Meteo) per un contesto reale.</p>
+            <hr>
+            <p style="font-size: 0.8rem;"><em>Nota: Questo è un progetto indipendente. 
+            Non è uno strumento medico. Ascolta sempre il tuo corpo.</em></p>
+        </div>
+        """, unsafe_allow_html=True)

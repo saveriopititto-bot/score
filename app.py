@@ -21,7 +21,7 @@ from engine.core import ScoreEngine, RunMetrics
 from services.api import StravaService, WeatherService, AICoachService
 from services.db import DatabaseService
 from ui.style import apply_custom_style
-from ui.legal import render_legal_section
+from ui.legal import render_legal_section, render_colophon
 from ui.visuals import render_history_table, render_trend_chart, render_scatter_chart, render_zones_chart
 from ui.feedback import render_feedback_form
 
@@ -64,16 +64,18 @@ if "code" in st.query_params and not st.session_state.strava_token:
 if not st.session_state.strava_token:
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 1. HERO SECTION (Titolo e Bottone)
+    # 1. HERO SECTION (Logo 30% più piccolo, No Slogan, Icone rimosse)
     _, c_center, _ = st.columns([1, 2, 1])
     with c_center:
-        try: st.image("sCore.png", use_container_width=True)
-        except: st.markdown("<h1 style='text-align: center; color: #FFCF96;'>sCore Lab</h1>", unsafe_allow_html=True)
-        
+        # Logo più piccolo (width 200px approx)
+        c_img_L, c_img_C, c_img_R = st.columns([1, 1, 1])
+        with c_img_C:
+             try: st.image("sCore.png", use_container_width=True) 
+             except: st.markdown("<h1 style='text-align: center; color: #FFCF96;'>sCore Lab</h1>", unsafe_allow_html=True)
+
         st.markdown("""
-        <div style="text-align: center; margin-bottom: 30px;">
-            <h3 style="color: #6C5DD3; font-weight: 800; letter-spacing: -0.5px;">Corri. Analizza. Evolvi.</h3>
-            <p style="color: #636E72; font-size: 1.1rem;">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <p style="color: #636E72; font-size: 1.1rem; margin-top: 10px;">
                 Il nuovo standard per l'analisi della corsa.<br>
                 Powered by <strong>Engine 4.1</strong>
             </p>
@@ -85,16 +87,21 @@ if not st.session_state.strava_token:
         link_strava = auth_svc.get_link(redirect_url)
         
         c1, c2 = st.columns([1, 1], gap="small")
-        with c1: st.link_button("🚀 Connetti Strava", link_strava, type="primary", use_container_width=True)
+        with c1: st.link_button("Connetti Strava", link_strava, type="primary", use_container_width=True)
         with c2: 
-            if st.button("👀 Demo Mode", use_container_width=True):
+            if st.button("Demo Mode", use_container_width=True):
                 st.session_state.demo_mode = True
                 st.session_state.strava_token = {"access_token": "DEMO", "athlete": {"id": 123, "firstname": "Demo", "lastname": "User"}}
                 st.rerun()
+        
+        # Bottone Privacy Minimal Landing
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("⚖️ Privacy Policy & Terms of Service", type="secondary", use_container_width=True):
+            render_legal_section()
 
-    st.markdown("<br><br><hr><br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True) # Separatore minimo, non HR
 
-    # 2. IL MANIFESTO (Le 3 Schermate che hai scritto)
+    # 2. IL MANIFESTO
     st.markdown("<h3 style='text-align: center; color: #444;'>Il Metodo sCore</h3><br>", unsafe_allow_html=True)
 
     col_a, col_b, col_c = st.columns(3, gap="large")
@@ -115,7 +122,7 @@ if not st.session_state.strava_token:
 
     with col_b:
         st.markdown("""
-        <div style="background-color: #F8F9FA; padding: 20px; border-radius: 15px; border-left: 5px solid #F6FDC3; height: 100%;">
+        <div style="background-color: #F8F9FA; padding: 20px; border-radius: 15px; border-left: 5px solid #FF8080; height: 100%;">
             <h4 style="color: #444;">🎮 Gioca con consapevolezza</h4>
             <p style="font-size: 0.9rem; color: #555;">
                 Non è una gara, è un feedback. Nessun giudizio, solo un obiettivo: <strong>correre meglio la prossima volta</strong>.
@@ -378,14 +385,17 @@ else:
             else: trend_lbl, trend_col = "Stabile →", "off"
 
             eng = ScoreEngine()
+            # Calcolo percentili
             age_pct = eng.age_adjusted_percentile(cur_score, age)
+            
+            # Recuperiamo WR Pct formattato
+            wr_pct_val = cur_run.get('WR_Pct', 0.0)
 
             # === TAB 1: DASHBOARD ===
             with t1:
-                # INJECT CUSTOM CSS FOR ANIMATIONS
+                # INJECT CUSTOM CSS
                 st.markdown("""
                 <style>
-                    /* Base Circle Style */
                     .stat-circle {
                         transition: all 0.3s ease;
                     }
@@ -403,35 +413,31 @@ else:
                         transition: stroke-dasharray 1s ease-out;
                     }
                     .score-circle-container:hover circle.progress {
-                        stroke-dasharray: 800, 1000; /* Approximate circumference */
-                        stroke: #6C5DD3; /* Color change on hover */
+                        stroke-dasharray: 800, 1000;
+                        stroke: #6C5DD3;
                     }
                     
-                    /* RESPONSIVE DASHBOARD */
+                    /* RESPONSIVE */
                     @media (max-width: 768px) {
-                        /* 1. Cerchio ATTESO (più piccolo) */
                         .stat-circle {
                             width: 100px !important;
                             height: 100px !important;
                         }
-                        .stat-circle span:nth-of-type(1) { font-size: 0.55rem !important; } /* Label */
-                        .stat-circle span:nth-of-type(2) { font-size: 1.6rem !important; } /* Valore */
-                        .stat-circle div { font-size: 0.5rem !important; padding: 2px 6px !important; } /* Tag */
+                        .stat-circle span:nth-of-type(1) { font-size: 0.55rem !important; }
+                        .stat-circle span:nth-of-type(2) { font-size: 1.6rem !important; }
+                        .stat-circle div { font-size: 0.5rem !important; padding: 2px 6px !important; }
                         
-                        /* 2. Cerchio OGGI (scalato) */
-                        /* Usiamo ZOOM/SCALE per il container SVG complesso */
                         .score-circle-container {
                             transform: scale(0.75);
                             transform-origin: center top;
-                            margin-bottom: -50px; /* Compensa lo spazio vuoto dopo lo scale */
+                            margin-bottom: -50px;
                         }
                     }
                 </style>
                 """, unsafe_allow_html=True)
 
-                # Layout: Atteso (Text) | Score Oggi (Big Circle) | Trend/Ieri (Circle)
-                # Aumentiamo lo spazio centrale per il cerchio più grande
-                c_exp, c_today, c_trend = st.columns([1, 2, 1], gap="small", vertical_alignment="center")
+                # Layout: Atteso | Percentile (Big) | Drift
+                c_exp, c_today, c_drift = st.columns([1, 2, 1], gap="small", vertical_alignment="center")
                 
                 with c_exp:
                     exp_score = round(cur_run['SCORE_MA_28'], 2)
@@ -445,14 +451,11 @@ else:
                     </div>""", unsafe_allow_html=True)
                 
                 with c_today:
-                    # Central Circle: +50% bigger (apx 220px vs 140px)
-                    # Using SVG to allow "border filling" animation
                     clean_rank = cur_run['Rank'].split('/')[0].strip()
-                    clean_rank_key = clean_rank.split(' ')[0].upper() # Estrae "ELITE", "PRO", etc.
+                    clean_rank_key = clean_rank.split(' ')[0].upper()
+                    rank_color = Config.RANK_COLORS.get(clean_rank_key, "#CDFAD5")
                     
-                    # Colore Dinamico
-                    rank_color = Config.RANK_COLORS.get(clean_rank_key, "#CDFAD5") # Fallback Green
-                    
+                    # MODIFICATO: OGGI -> PERCENTILE
                     st.markdown(f"""
                     <div class="score-circle-container" style="display: flex; justify-content: center; cursor: pointer;">
                         <div style="position: relative; width: 230px; height: 230px;">
@@ -461,23 +464,32 @@ else:
                                 <circle class="progress" cx="115" cy="115" r="110" style="stroke: {rank_color} !important;" />
                             </svg>
                             <div style="position: absolute; top:0; left:0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;">
-                                <span style="color: #999; font-size: 0.9rem; font-weight: 700; letter-spacing: 1px;">OGGI</span>
-                                <span style="color: #2D3436; font-size: 5rem; font-weight: 800; line-height: 0.9;">{cur_score}</span>
+                                <span style="color: #999; font-size: 0.9rem; font-weight: 700; letter-spacing: 1px;">PERCENTILE</span>
+                                <span style="color: #2D3436; font-size: 4rem; font-weight: 800; line-height: 0.9;">{wr_pct_val}%</span>
                                 <div style="background:{rank_color}25; color:{rank_color}; border: 1px solid {rank_color}; padding:4px 16px; border-radius:20px; font-size:0.8rem; font-weight: 700; margin-top: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">{clean_rank}</div>
                             </div>
                         </div>
                     </div>""", unsafe_allow_html=True)
 
-                with c_trend:
+                with c_drift:
                     dec_val = cur_run.get('Decoupling', 0.0)
-                    dec_color = "#10B981" # Green
-                    if dec_val > 5.0: dec_color = "#EF4444" # Red
-                    elif dec_val > 3.0: dec_color = "#F59E0B" # Amber
+                    dec_color = "#10B981" 
+                    drift_cat = "ECCELLENTE"
+                    
+                    if dec_val > 5.0: 
+                        dec_color = "#EF4444" 
+                        drift_cat = "ATTENZIONE"
+                    elif dec_val > 3.0: 
+                        dec_color = "#F59E0B"
+                        drift_cat = "BUONO"
+                        
+                    if dec_val > 10.0:
+                         dec_color = "#991B1B"
+                         drift_cat = "CRITICO"
 
-                    # CSS STATICO (con variabili) + HTML DINAMICO
+                    # NUOVO DRIFT UI: Scritta Circolare (SVG) + Bordo Colorato
                     st.markdown(f"""
 <style>
-    /* Container */
     .drift-container {{
         position: relative;
         width: 160px;
@@ -487,13 +499,10 @@ else:
         justify-content: center;
         align-items: center;
     }}
-
-    /* Cerchio Drift */
     .drift-circle {{
-        width: 140px;
-        height: 140px;
+        width: 120px;
+        height: 120px;
         border-radius: 50%;
-        /* USO VARIABILE CSS */
         border: 4px solid var(--drift-color);
         background: white;
         display: flex;
@@ -502,85 +511,53 @@ else:
         justify-content: center;
         box-shadow: 0 5px 20px rgba(0,0,0,0.05);
         z-index: 10;
-        cursor: pointer;
-        transition: transform 0.25s ease;
+        position: relative;
     }}
-
-    .drift-circle:hover {{
-        transform: scale(0.95);
-    }}
-    
-    /* CUSTOM LEGEND TOOLTIP (Sopra) */
-    .drift-tooltip {{
+    /* SVG per testo curvo */
+    .drift-text-svg {{
         position: absolute;
-        bottom: 150px; /* Sopra il cerchio */
-        left: 50%;
-        transform: translateX(-50%) translateY(10px);
-        background: white;
-        padding: 8px 12px;
-        border-radius: 12px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        opacity: 0;
-        visibility: hidden;
-        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        z-index: 20;
-        width: max-content;
-        text-align: left;
-        border: 1px solid #f0f0f0;
+        top: 0;
+        left: 0;
+        width: 160px;
+        height: 160px;
         pointer-events: none;
+        animation: spin-slow 20s linear infinite;
     }}
-    
-    .drift-container:hover .drift-tooltip {{
-        opacity: 1;
-        visibility: visible;
-        transform: translateX(-50%) translateY(0);
-    }}
-    
-    .drift-tooltip-item {{
-        font-size: 0.75rem;
-        font-weight: 600;
-        margin-bottom: 2px;
-        display: block;
-    }}
-    
-    /* RESPONSIVE */
-    @media (max-width: 768px) {{
-        .drift-container {{ transform: scale(0.9); }}
-        /* Su mobile magari lo mostriamo sotto o statico? Per ora hover */
-    }}
+    @keyframes spin-slow {{ from {{ transform: rotate(0deg); }} to {{ transform: rotate(360deg); }} }}
 </style>
 
-<!-- Passiamo il colore via style inline al container -->
 <div class="drift-container" style="--drift-color: {dec_color};">
-    <!-- TOOLTIP CUSTOM -->
-    <div class="drift-tooltip">
-        <div class="drift-tooltip-item" style="color: #10B981;">&lt;3% Eccellente</div>
-        <div class="drift-tooltip-item" style="color: #F59E0B;">3-5% Buono</div>
-        <div class="drift-tooltip-item" style="color: #EF4444;">&gt;5% Attenzione</div>
-        <div class="drift-tooltip-item" style="color: #991B1B;">&gt;10% Critico</div>
-    </div>
+    <!-- Testo Circolare via SVG -->
+    <svg class="drift-text-svg" viewBox="0 0 160 160">
+        <path id="curve" d="M 20, 80 a 60,60 0 1,1 120,0 a 60,60 0 1,1 -120,0" fill="transparent" />
+        <text width="160" font-family="'Montserrat', sans-serif" font-size="12" font-weight="700" fill="{dec_color}" letter-spacing="2">
+            <textPath href="#curve" startOffset="50%" text-anchor="middle">
+                {drift_cat} • {drift_cat} • {drift_cat} •
+            </textPath>
+        </text>
+    </svg>
 
+    <!-- Cerchio Centrale -->
     <div class="drift-circle">
         <span style="color:#999;font-size:0.65rem;font-weight:700;">DRIFT</span>
-        <span style="color:{dec_color};font-size:2.2rem;font-weight:800;line-height:1;">{dec_val}%</span>
-        <div style="background:{dec_color}22;color:{dec_color};padding:2px 10px;border-radius:15px;font-size:0.6rem;font-weight:700;margin-top:3px;">
-            EFFICIENCY
-        </div>
+        <span style="color:{dec_color};font-size:2.0rem;font-weight:800;line-height:1;">{dec_val}%</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
-
+                
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                details = cur_run.get("SCORE_DETAIL") or {}
-                
-                c_k1, c_k2 = st.columns(2)
-                with c_k1: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
-                with c_k2: st.metric("Percentile", f"{cur_run.get('WR_Pct', 0)}%", "Reale")
+                # 4. Metriche Extra (solo Trend)
+                # Percentile è già al centro
+                _, c_c = st.columns([1,1]) # Placeholder per allineamento
+                with c_c: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
 
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                with st.expander("🔍 Perché questo punteggio? (Breakdown)", expanded=True):
+
+            # === TAB 2: LABORATORIO (SPOSTATO TUTTO QUI) ===
+            with t2:
+                # BREAKDOWN E ARCHIVIO SPOSTATI QUI
+                st.markdown("### 🔍 Analisi Dettagliata")
+                with st.expander("Perché questo punteggio? (Breakdown)", expanded=True):
                     details = cur_run.get("SCORE_DETAIL")
                     if not details or not isinstance(details, dict):
                          m_tmp = RunMetrics(cur_run['Power'], cur_run['HR'], cur_run['Dist (km)']*1000, 0, 0, weight, hr_max, hr_rest, 20, 50)
@@ -590,15 +567,13 @@ else:
                     with d1: st.metric("🚀 Potenza", f"+{details.get('Potenza', 0)}%")
                     with d2: st.metric("🔋 Volume", f"+{details.get('Volume', 0)}%")
                     with d3: st.metric("💓 Intensità", f"+{details.get('Intensità', 0)}%")
-                    
                     with d4: st.metric("📉 Efficienza", f"{details.get('Malus Efficienza', 0)}")
 
                 with st.expander("📂 Archivio Attività", expanded=False):
                     render_history_table(df)
-
-            # === TAB 2: LABORATORIO ===
-            with t2:
-                st.markdown("### 🔬 Laboratorio Analisi")
+                    
+                st.divider()
+                st.markdown("### 🔬 Grafici & AI")
                 if len(df) > 1:
                     render_trend_chart(df.head(60))
                     st.divider()
@@ -636,11 +611,39 @@ else:
                     zones_c = ScoreEngine().calculate_zones(run.get('raw_watts', []), ftp)
                     render_zones_chart(zones_c)
             
-            # FOOTER
-            st.markdown("<br>", unsafe_allow_html=True)
-            u_id = ath.get("id")
-            u_name = f"{ath.get('firstname', '')} {ath.get('lastname', '')}"
-            render_feedback_form(db_svc, u_id, u_name)
+            # --- FOOTER CARDS ---
+            st.markdown("<br><br><br>", unsafe_allow_html=True)
+            f1, f2, f3 = st.columns(3, gap="medium")
             
-            st.markdown("<br>", unsafe_allow_html=True)
-            render_legal_section()
+            with f1:
+                with st.expander("🐞 Hai un'idea o un Bug?", expanded=False):
+                    u_id = ath.get("id")
+                    u_name = f"{ath.get('firstname', '')} {ath.get('lastname', '')}"
+                    render_feedback_form(db_svc, u_id, u_name)
+            
+            with f2:
+                # render_legal_section crea un expander internamente,
+                # ma qui vogliamo controllarlo noi.
+                # Modifichiamo la logica o lo chiamiamo direttamente? 
+                # render_legal_section() crea st.expander direttamente.
+                # Possiamo chiamarlo qui dentro un blocco vuoto? NO, nested expanders forbidden.
+                # Quindi dobbiamo sostituire render_legal_section con il contenuto manuale o chiamarlo FUORI dall'expander.
+                # User asked for "crea tre card... che si aprono".
+                # Metto il contenuto di legal direttamente o chiamo render_legal_section che È una card.
+                render_legal_section() # Questo renderizza già un expander "Privacy & Terms"
+            
+            with f3:
+                with st.expander("ℹ️ Legenda", expanded=False):
+                     st.markdown("""
+                     **Efficienza (Drift):**
+                     - <span style="color:#10B981">●</span> <3% Eccellente
+                     - <span style="color:#F59E0B">●</span> 3-5% Buono
+                     - <span style="color:#EF4444">●</span> >5% Attenzione
+                     - <span style="color:#991B1B">●</span> >10% Critico
+                     
+                     **Percentile:**
+                     Confronto con atleti della tua età.
+                     """, unsafe_allow_html=True)
+
+            # COLOPHON
+            render_colophon()
