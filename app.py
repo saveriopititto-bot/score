@@ -120,7 +120,7 @@ else:
             st.rerun()
 
     # --- CONFIGURAZIONE ATLETA (Smart Sync) ---
-    weight, hr_max, hr_rest, ftp, age = Config.DEFAULT_WEIGHT, Config.DEFAULT_HR_MAX, Config.DEFAULT_HR_REST, Config.DEFAULT_FTP, Config.DEFAULT_AGE
+    weight, hr_max, hr_rest, ftp, age, sex = Config.DEFAULT_WEIGHT, Config.DEFAULT_HR_MAX, Config.DEFAULT_HR_REST, Config.DEFAULT_FTP, Config.DEFAULT_AGE, "M"
     zones_data = None
     saved_profile = None
 
@@ -135,11 +135,16 @@ else:
             hr_rest = saved_profile.get('hr_rest', hr_rest)
             ftp = saved_profile.get('ftp', ftp)
             age = saved_profile.get('age', age)
+            sex = saved_profile.get('sex', sex)
         else:
             s_weight = ath.get('weight', 0)
             if s_weight: weight = float(s_weight)
             s_ftp = ath.get('ftp', 0) 
             if s_ftp: ftp = int(s_ftp)
+            
+            # Strava returns 'M', 'F' or None usually
+            s_sex = ath.get('sex')
+            if s_sex in ['M', 'F']: sex = s_sex 
             
             birthdate = ath.get('birthdate')
             if birthdate:
@@ -170,12 +175,13 @@ else:
 
     with st.expander("⚙️ Profilo Atleta & Parametri Fisici", expanded=False):
         with st.form("athlete_settings"):
-            c1, c2, c3, c4, c5 = st.columns(5)
+            c1, c2, c3, c4, c5, c6 = st.columns(6)
             with c1: new_weight = st.number_input("Peso (kg)", value=float(weight), step=0.5)
             with c2: new_hr_max = st.number_input("FC Max", value=int(hr_max))
             with c3: new_hr_rest = st.number_input("FC Riposo", value=int(hr_rest))
             with c4: new_ftp = st.number_input("FTP (W)", value=int(ftp))
             with c5: new_age = st.number_input("Età", value=int(age))
+            with c6: new_sex = st.selectbox("Sesso", ["M", "F"], index=0 if sex == "M" else 1)
             
             if st.form_submit_button("💾 Salva Profilo"):
                 if not st.session_state.demo_mode:
@@ -188,12 +194,13 @@ else:
                         "hr_rest": int(new_hr_rest),
                         "ftp": int(new_ftp),
                         "age": int(new_age),
+                        "sex": str(new_sex),
                         "updated_at": datetime.now().isoformat()
                     }
                     success, msg = db_svc.save_athlete_profile(payload)
                     if success:
                         st.success("✅ Profilo salvato!")
-                        weight, hr_max, hr_rest, ftp, age = new_weight, new_hr_max, new_hr_rest, new_ftp, new_age
+                        weight, hr_max, hr_rest, ftp, age, sex = new_weight, new_hr_max, new_hr_rest, new_ftp, new_age, new_sex
                         time.sleep(1)
                         st.rerun()
                     else:
@@ -243,7 +250,7 @@ else:
                         if s.get('start_latlng'):
                              t, h = WeatherService.get_weather(s['start_latlng'][0], s['start_latlng'][1], dt.strftime("%Y-%m-%d"), dt.hour)
 
-                        m = RunMetrics(s.get('average_watts', 0), s.get('average_heartrate', 0), s.get('distance', 0), s.get('moving_time', 0), s.get('total_elevation_gain', 0), weight, hr_max, hr_rest, t, h)
+                        m = RunMetrics(s.get('average_watts', 0), s.get('average_heartrate', 0), s.get('distance', 0), s.get('moving_time', 0), s.get('total_elevation_gain', 0), weight, hr_max, hr_rest, t, h, age, sex)
                         dec = eng.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
                         
                         score, details, wcf, wr_pct = eng.compute_score(m, dec)

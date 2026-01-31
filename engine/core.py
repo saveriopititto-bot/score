@@ -2,17 +2,114 @@ import numpy as np
 import logging
 from typing import Dict, Any, Tuple, List, Optional
 from config import Config
+from scipy.stats import norm
 
 # Setup Logger
 logger = logging.getLogger("sCore.Engine")
 
-def clip(x: float, low: float, high: float) -> float:
-    return max(low, min(x, high))
+# ============================================================
+# 1. MODELLI BASE (μ0, σ0) PER DISTANZA E SESSO
+# ============================================================
+
+# ============================================================
+# 1. RECORD MONDIALI (secondi)
+# ============================================================
+
+WR = {
+    "5k": 12*60 + 35,
+    "10k": 26*60 + 11,
+    "hm": 57*60 + 31,
+    "m": 2*3600 + 35
+}
+
+# ============================================================
+# 2. CURVE PERCENTILI (parametri base)
+# ============================================================
+
+BASE_PARAMS = {
+    ("5k", "M"): (6.68, 0.35),
+    ("5k", "F"): (6.79, 0.38),
+    ("10k", "M"): (7.39, 0.33),
+    ("10k", "F"): (7.51, 0.36),
+    ("hm", "M"): (8.16, 0.32),
+    ("hm", "F"): (8.27, 0.35),
+    ("m", "M"): (8.91, 0.30),
+    ("m", "F"): (9.00, 0.33),
+}
+
+# ============================================================
+# 3. PARAMETRI AGE-DEPENDENTI μ(a), σ(a)
+# ============================================================
+
+def age_params(mu0, sigma0, age, sex):
+    k_mu = 0.006 if sex == "M" else 0.007
+    k_sigma = 0.001
+    mu = mu0 - k_mu * (age - 30)
+    sigma = sigma0 + k_sigma * max(0, age - 30)
+    return mu, sigma
+
+# ============================================================
+# 4. PERCENTILE REALE
+# ============================================================
+
+def percentile(distance, sex, age, T_act):
+    if (distance, sex) not in BASE_PARAMS:
+        return 0.5 # Default fallback
+        
+    mu0, sigma0 = BASE_PARAMS[(distance, sex)]
+    mu, sigma = age_params(mu0, sigma0, age, sex)
+    z = (np.log(T_act) - mu) / sigma
+    return norm.cdf(z)
+
+# ============================================================
+# 5. FATTORI DI CORREZIONE T_ref
+# ============================================================
+
+def F_age(age):
+    return 1 + 0.15 * ((age - 30) / 30) ** 2
+
+def F_sex(sex):
+    return 1.0 if sex == "M" else 1.10
+
+def F_level(p):
+    if p > 0.95: return 1.00
+    if p > 0.85: return 1.05
+    if p > 0.70: return 1.12
+    if p > 0.50: return 1.20
+    return 1.35
+
+def F_surface(surface):
+    return {
+        "road": 1.00,
+        "gravel": 1.03,
+        "trail": 1.06,
+        "trail_tech": 1.08
+    }.get(surface, 1.00)
+
+def F_env(temp_c):
+    return 1 + max(0, temp_c - 15) * 0.01
+
+# ============================================================
+# 6. TEMPO DI RIFERIMENTO DINAMICO
+# ============================================================
+
+def T_ref(distance, age, sex, p, surface, temp_c):
+    # Fallback to 10k WR if unknown
+    wr_sec = WR.get(distance, 26*60 + 11) 
+    
+    return (
+        wr_sec
+        * F_age(age)
+        * F_sex(sex)
+        * F_level(p)
+        * F_surface(surface)
+        * F_env(temp_c)
+    )
 
 class RunMetrics:
     def __init__(self, avg_power: float, avg_hr: float, distance: float, moving_time: int, 
                  elevation_gain: float, weight: float, hr_max: int, hr_rest: int, 
-                 temp_c: float, humidity: float):
+                 temp_c: float, humidity: float, age: int = 30, sex: str = "M"):
         self.avg_power = avg_power
         self.avg_hr = avg_hr
         self.distance_meters = distance
@@ -23,6 +120,8 @@ class RunMetrics:
         self.hr_rest = hr_rest
         self.temperature = temp_c
         self.humidity = humidity
+        self.age = age
+        self.sex = sex
 
 class ScoreEngine:
     
@@ -71,99 +170,105 @@ class ScoreEngine:
         total = len(watts_stream)
         return {f"Z{i+1}": round(c/total*100, 1) for i, c in enumerate(zones)}
 
-    def compute_score_4_1_math(self, W_avg: float, ascent: float, distance: float, HR_avg: float, 
-                               HR_rest: int, HR_max: int, T_act: float, T_ref: float, D: float, 
-                               T_hours: float, temp_c: float, humidity: float, 
+    def compute_score_4_1_math(self, W_avg: float, ascent: float, distance_m: float, HR_avg: float, 
+                               HR_rest: int, HR_max: int, T_act_sec: float, D: float, 
+                               T_hours: float, temp_c: float, humidity: float,
+                               dist_label: str, sex: str, age: int,
+                               surface: str = "road",
                                alpha: float = Config.SCORE_ALPHA, 
-                               beta: float = Config.SCORE_BETA, 
-                               gamma: float = Config.SCORE_GAMMA, 
-                               W_ref: float = Config.SCORE_W_REF) -> Tuple[float, float, float]:
+                               beta: float = 3.0, 
+                               gamma: float = 2.0) -> Tuple[float, float, float]:
         """
-        SCORE 4.1 – Implementazione matematica pura fornita
+        SCORE 4.1 INTEGRATO (CON LIVELLO PERCENTILE E T_REF DINAMICO)
         """
-        # 1. Potenza corretta dislivello
-        G = ascent / max(distance, 1)
-        W_adj = W_avg * (1 + G)
-        W_eff = np.log(1 + W_adj / W_ref)
+        # ---- percentile reale
+        p = percentile(dist_label, sex, age, T_act_sec)
 
-        # 2. HRR robusta
+        # ---- tempo di riferimento dinamico
+        Tref = T_ref(dist_label, age, sex, p, surface, temp_c)
+
+        # ---- performance
+        P = Tref / max(T_act_sec, 1)
+        # Nota: utilizzo np.clip come da libreria
+        P_eff = np.log(1 + gamma * np.clip(P, 0.6, 1.2))
+
+        # ---- potenza efficace
+        G = ascent / max(distance_m, 1)
+        W_eff = np.log(1 + (W_avg * (1 + G)) / 6.0)
+
+        # ---- HRR robusta
         HRR = (HR_avg - HR_rest) / max(HR_max - HR_rest, 1)
-        HRR_clip = clip(HRR, 0.30, 0.95)
-        HRR_eff = np.log(1 + beta * HRR_clip)
+        HRR = np.clip(HRR, 0.30, 0.95)
+        HRR_eff = np.log(1 + beta * HRR)
 
-        # 3. Weather Correction Factor (WCF)
+        # ---- weather correction
         WCF = (
             1
             + max(0, 0.012 * (temp_c - 20))
             + max(0, 0.005 * (humidity - 60))
         )
 
-        # 4. Performance relativa
-        P = T_ref / max(T_act, 1)
-        P_clip = clip(P, 0.6, 1.2)
-        P_eff = np.log(1 + gamma * P_clip)
+        # ---- stabilità
+        stability = np.exp(-alpha * np.sqrt(D / max(T_hours, 1e-6)))
 
-        # 5. Stabilità cardiovascolare
-        # Nota: D qui deve essere percentuale (es. 5.0) per far funzionare bene sqrt(D) con alpha 0.8
-        stability = np.exp(-alpha * np.sqrt(abs(D) / max(T_hours, 1e-6)))
+        # ---- SCORE finale
+        SCORE = W_eff * (WCF * P_eff / HRR_eff) * stability
 
-        # 6. SCORE finale
-        raw_score = (
-            W_eff
-            * (WCF * P_eff / HRR_eff)
-            * stability
-        )
-        
-        return raw_score, WCF, P
+        return SCORE, p, Tref, WCF
 
     def compute_score(self, m: RunMetrics, decoupling_decimal: float) -> Tuple[float, Dict[str, Any], float, float]:
         """
         Wrapper che collega l'app alla matematica 4.1
         """
         try:
+            # Infer Distance Label
+            d = m.distance_meters
+            dist_label = "10k" # Default fallback
+            if d < 8000: dist_label = "5k"
+            elif d < 16000: dist_label = "10k"
+            elif d < 30000: dist_label = "hm"
+            else: dist_label = "m"
+
             # Preparazione Dati per l'algoritmo
             
             # 1. Watt per Kg
             w_kg = m.avg_power / m.weight
 
-            # 2. Tempo di Riferimento (T_ref)
-            t_ref_seconds = m.distance_meters / Config.ELITE_SPEED_M_S
-
-            # 3. Decoupling in formato percentuale (es. 3.5 invece di 0.035) per la formula
-            d_percent = decoupling_decimal * 100 
-            
-            # 4. Durata in ore
+            # 2. Durata in ore
             t_hours = m.moving_time / 3600.0
 
+            # 3. Decoupling Decimal (passiamo il valore puro, es. 0.05)
+            # Nota: la UI potrebbe volerlo in % per display
+
             # --- ESECUZIONE ALGORITMO 4.1 ---
-            raw_score, wcf, p_ratio = self.compute_score_4_1_math(
+            final_score, p, t_ref, wcf = self.compute_score_4_1_math(
                 W_avg=w_kg,
                 ascent=m.elevation_gain,
-                distance=m.distance_meters,
+                distance_m=m.distance_meters,
                 HR_avg=m.avg_hr,
                 HR_rest=m.hr_rest,
                 HR_max=m.hr_max,
-                T_act=m.moving_time,
-                T_ref=t_ref_seconds,
-                D=d_percent,
+                T_act_sec=m.moving_time,
+                D=decoupling_decimal,
                 T_hours=t_hours,
                 temp_c=m.temperature,
-                humidity=m.humidity
+                humidity=m.humidity,
+                dist_label=dist_label,
+                sex=m.sex,
+                age=m.age,
+                surface="road" 
             )
 
             # --- POST PROCESSING ---
-            
-            final_score = raw_score * Config.SCALING_FACTOR
-            
-            # Percentuale rispetto al Record del Mondo (usiamo P della formula)
-            wr_pct = p_ratio * 100
+            # Percentuale (p è decimale 0-1) -> 0-100
+            wr_pct = p * 100
 
             # Costruzione Dettagli per la UI
             details = {
                 "Potenza": round(w_kg * 10, 1),           # Proxy visivo
                 "Volume": round(t_hours * 10, 1),         # Proxy visivo
                 "Intensità": round(m.avg_hr / m.hr_max * 100, 0),
-                "Malus Efficienza": f"-{round(abs(d_percent), 1)}%" if d_percent > 5 else "OK"
+                "Malus Efficienza": f"-{round(abs(decoupling_decimal * 100), 1)}%" if decoupling_decimal > 0.05 else "OK"
             }
 
             return final_score, details, wcf, wr_pct
