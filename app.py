@@ -444,16 +444,19 @@ else:
                 c_pct, c_score, c_drift = st.columns([1, 2, 1], gap="small", vertical_alignment="center")
                 
                 with c_pct:
-                    # LEFT: PERCENTILE (ex Baseline)
-                    # Colore statico o dinamico? Usiamo un neutro o purple light
-                    pct_color = "#E0E0E0"
-                    
+                    # LEFT: PERCENTILE
+                    # Colore Dinamico Percentile (Ranking)
+                    pct_color = "#FF8080" # 0-25
+                    if wr_pct_val > 75: pct_color = "#CDFAD5"
+                    elif wr_pct_val > 50: pct_color = "#F6FDC3"
+                    elif wr_pct_val > 25: pct_color = "#FFCF96"
+
                     st.markdown(f"""
                     <div style="display: flex; justify-content: center;">
-                        <div class="stat-circle" style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #F0F0F3; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
+                        <div class="stat-circle" style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid {pct_color}; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
                             <span style="color: #999; font-size: 0.65rem; font-weight: 700;">PERCENTILE</span>
-                            <span style="color: #6C5DD3; font-size: 2.2rem; font-weight: 800; line-height: 1;">{wr_pct_val}%</span>
-                            <div style="background:#6C5DD322; color:#6C5DD3; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">RANKING</div>
+                            <span style="color: {pct_color}; font-size: 2.2rem; font-weight: 800; line-height: 1;">{wr_pct_val}%</span>
+                            <div style="background:{pct_color}22; color: #555; border: 1px solid {pct_color}; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">RANKING</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
                 
