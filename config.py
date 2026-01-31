@@ -28,6 +28,15 @@ class Config:
         "ADVANCED": 0.22,
         "INTERMEDIATE": 0.15
     }
+
+    # Rank Colors (Hex for SVG/CSS)
+    RANK_COLORS = {
+        "ELITE": "#8B5CF6",       # Purple
+        "PRO": "#3B82F6",         # Blue
+        "ADVANCED": "#10B981",    # Emerald
+        "INTERMEDIATE": "#F59E0B", # Amber
+        "ROOKIE": "#9CA3AF"       # Gray
+    }
     
     # --- DEFAULTS ---
     DEFAULT_WEIGHT = 70.0
