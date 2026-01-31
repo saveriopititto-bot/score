@@ -55,7 +55,11 @@ def age_params(mu0, sigma0, age, sex):
 def percentile(distance, sex, age, T_act):
     if (distance, sex) not in BASE_PARAMS:
         return 0.5 # Default fallback
-        
+    
+    # Safety Check for invalid time
+    if T_act <= 10: # Min 10 seconds to avoid log(0) issues
+        return 0.99 
+
     mu0, sigma0 = BASE_PARAMS[(distance, sex)]
     mu, sigma = age_params(mu0, sigma0, age, sex)
     z = (np.log(T_act) - mu) / sigma
@@ -332,8 +336,6 @@ class ScoreEngine:
             return final_score, details, wcf, wr_pct, quality
             
         except Exception as e:
-            import streamlit as st
-            st.error(f"⚠️ ENGINE CRASH: {e}")
             logger.error(f"Error computing score: {e}")
             return 0.0, {}, 1.0, 0.0, {}
 
