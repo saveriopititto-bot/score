@@ -354,6 +354,26 @@ else:
                         stroke-dasharray: 800, 1000; /* Approximate circumference */
                         stroke: #6C5DD3; /* Color change on hover */
                     }
+                    
+                    /* RESPONSIVE DASHBOARD */
+                    @media (max-width: 768px) {
+                        /* 1. Cerchio ATTESO (più piccolo) */
+                        .stat-circle {
+                            width: 100px !important;
+                            height: 100px !important;
+                        }
+                        .stat-circle span:nth-of-type(1) { font-size: 0.55rem !important; } /* Label */
+                        .stat-circle span:nth-of-type(2) { font-size: 1.6rem !important; } /* Valore */
+                        .stat-circle div { font-size: 0.5rem !important; padding: 2px 6px !important; } /* Tag */
+                        
+                        /* 2. Cerchio OGGI (scalato) */
+                        /* Usiamo ZOOM/SCALE per il container SVG complesso */
+                        .score-circle-container {
+                            transform: scale(0.75);
+                            transform-origin: center top;
+                            margin-bottom: -50px; /* Compensa lo spazio vuoto dopo lo scale */
+                        }
+                    }
                 </style>
                 """, unsafe_allow_html=True)
 
@@ -494,6 +514,52 @@ else:
         height:6px;
         border-radius:50%;
         margin-right:4px;
+    }}
+    
+    /* RESPONSIVE HARDENING (Drift) */
+    @media (max-width: 768px) {{
+        .drift-container {{
+            transform: scale(0.9);
+            margin-bottom: 20px;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        .drift-container {{
+             transform: scale(0.8);
+        }}
+    }}
+
+    /* Fallback TOUCH: Mostra lista statica sotto */
+    @media (hover: none) {{
+        .drift-container {{
+            height: auto !important; /* Allow growing */
+            flex-direction: column;
+            width: 100% !important;
+            padding-bottom: 20px;
+        }}
+        
+        /* Reset absolute positioning for items */
+        .legend-item {{
+            position: relative !important;
+            top: auto !important;
+            left: auto !important;
+            transform: none !important;
+            opacity: 1 !important; /* Always visible */
+            margin-top: 8px;
+            width: 80%; /* Full width-ish */
+            text-align: left;
+            box-shadow: none !important;
+            border: 1px solid #eee;
+        }}
+        
+        /* Disable hover fan triggers */
+        .drift-circle:hover ~ .item-1,
+        .drift-circle:hover ~ .item-2,
+        .drift-circle:hover ~ .item-3,
+        .drift-circle:hover ~ .item-4 {{
+             transform: none !important;
+        }}
     }}
 </style>
 

@@ -141,5 +141,68 @@ def apply_custom_style():
              color: #FFCF96; /* Se ci sono highlight */
         }
         
+        /* ========================================================= */
+        /* MEDIA QUERIES - RESPONSIVE HARDENING */
+        /* ========================================================= */
+        
+        /* TABLET LANDSCAPE (≤ 1200px) */
+        @media (max-width: 1200px) {
+            .block-container {
+                padding-left: 2rem;
+                padding-right: 2rem;
+            }
+            div[data-testid="stMetricValue"] {
+                font-size: 1.2rem !important;
+            }
+        }
+        
+        /* TABLET / MOBILE (≤ 768px) */
+        @media (max-width: 768px) {
+            /* Font Scaling */
+            h1 { font-size: 1.8rem !important; }
+            h2 { font-size: 1.5rem !important; }
+            h3 { font-size: 1.2rem !important; }
+            p, div, span { font-size: 0.95rem; }
+            
+            /* Container Padding ridotto */
+            .block-container {
+                padding-top: 1rem;
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+            
+            /* Metriche impilate meglio */
+            div[data-testid="stMetric"] {
+                padding: 8px 4px !important;
+            }
+        }
+        
+        /* MOBILE SMALL (≤ 480px) */
+        @media (max-width: 480px) {
+            h1 { font-size: 1.5rem !important; }
+            
+            /* Nascondere elementi non essenziali se necessario */
+            .streamlit-expanderHeader {
+                font-size: 0.9rem;
+            }
+            
+            /* Bottoni full width su mobile */
+            div.stButton > button {
+                width: 100% !important;
+            }
+        }
+        
+        /* TOUCH DEVICES (Hover Fallback) */
+        @media (hover: none) {
+            div[data-testid="stMetric"]:hover {
+                transform: none !important;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+            }
+            
+            button[kind="primary"]:hover {
+                box-shadow: none !important;
+                background-color: #FFCF96 !important;
+            }
+        }
         </style>
     """, unsafe_allow_html=True)
