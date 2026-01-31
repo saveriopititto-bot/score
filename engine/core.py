@@ -44,7 +44,7 @@ BASE_PARAMS = {
 def age_params(mu0, sigma0, age, sex):
     k_mu = 0.006 if sex == "M" else 0.007
     k_sigma = 0.001
-    mu = mu0 - k_mu * (age - 30)
+    mu = mu0 + k_mu * (age - 30)
     sigma = sigma0 + k_sigma * max(0, age - 30)
     return mu, sigma
 
@@ -72,10 +72,15 @@ def F_sex(sex):
     return 1.0 if sex == "M" else 1.10
 
 def F_level(p):
-    if p > 0.95: return 1.00
-    if p > 0.85: return 1.05
-    if p > 0.70: return 1.12
-    if p > 0.50: return 1.20
+    """
+    p is the percentile (0.0=Fastest, 1.0=Slowest)
+    Elite athletes (p near 0) have factor 1.0
+    Rookies (p near 1) have factor > 1.0
+    """
+    if p < 0.05: return 1.00
+    if p < 0.15: return 1.05
+    if p < 0.30: return 1.12
+    if p < 0.50: return 1.20
     return 1.35
 
 def F_surface(surface):
@@ -185,9 +190,8 @@ class ScoreEngine:
         p = percentile(dist_label, sex, age, T_act_sec)
 
         # ---- tempo di riferimento dinamico
-        # CORREZIONE 1: p0 fissato a 0.70 per il riferimento
-        p0 = 0.70
-        Tref = T_ref(dist_label, age, sex, p0, surface, temp_c)
+        # Follow the spec: Tref depends on the athlete's level (percentile p)
+        Tref = T_ref(dist_label, age, sex, p, surface, temp_c)
 
         # ---- performance
         P = Tref / max(T_act_sec, 1)
@@ -220,7 +224,9 @@ class ScoreEngine:
         stability = np.exp(-alpha * np.sqrt(D / max(T_hours, 1e-6)))
 
         # ---- SCORE finale
-        SCORE = W_eff * (WCF * P_eff / HRR_eff) * stability
+        # Apply scaling factor to bring into 0-100 range
+        scale = getattr(Config, "SCALING_FACTOR", 280.0)
+        SCORE = W_eff * (WCF * P_eff / HRR_eff) * stability * scale
 
         return SCORE, p, Tref, WCF
 
@@ -294,13 +300,11 @@ class ScoreEngine:
             return 0.0, {}, 1.0, 0.0
 
     def get_rank(self, score: float) -> Tuple[str, str]:
+        # Use config thresholds if available
+        # The thresholds in Config (e.g., 0.35) seem to be for a different scale (decimal).
+        # We mapped the score to 0-100, so we should use intuitive thresholds or adapt.
+        # Let's keep the 0-100 logic but make it robust.
         if score >= 100: return "ELITE 🏆", "text-purple-600"
-        
-        # Use config thresholds if available, otherwise defaults
-        thresholds = getattr(Config, 'RANK_THRESHOLDS', {})
-        
-        # NOTE: logic in original code was hardcoded. adapting to potentially use config or keep simplicity
-        # For now keeping it simple but cleaner
         if score >= 85: return "PRO 🥇", "text-blue-600"
         if score >= 70: return "ADVANCED 🥈", "text-green-600"
         if score >= 50: return "INTERMEDIATE 🥉", "text-yellow-600"
