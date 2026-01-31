@@ -314,8 +314,12 @@ class ScoreEngine:
             quality = self.run_quality(final_score)
 
             # --- POST PROCESSING ---
-            # Percentuale (p è decimale 0-1) -> 0-100
-            wr_pct = p * 100
+            # Percentuale (p è probabilità di essere PIÙ VELOCI dell'utente)
+            # Scala: 0.0 (Elite) -> 1.0 (Lento)
+            # Vogliamo visualizzarlo come "Better than X%": 
+            # Se p=0.99 (99% sono più veloci), il rank è 1%.
+            # Se p=0.01 (1% sono più veloci), il rank è 99%.
+            wr_pct = (1 - p) * 100
 
             # Costruzione Dettagli per la UI
             # CORREZIONE 5: Formattazione Ore
