@@ -78,19 +78,18 @@ if not st.session_state.strava_token:
              link_strava = auth_svc.get_link(redirect_url)
              st.link_button("Connetti Strava", link_strava, type="primary", use_container_width=True)
 
-        st.markdown("""
-        <div style="text-align: center; margin-top: 10px; margin-bottom: 20px;">
-            <p style="color: #636E72; font-size: 1.1rem;">
-                Il nuovo standard per l'analisi della corsa.<br>
-                Powered by <strong>sCorengine 4.1</strong>
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-
     st.markdown("<br>", unsafe_allow_html=True) 
 
     # 2. IL MANIFESTO
-    st.markdown("<h3 style='text-align: center; color: #E67E22; margin-bottom: 0;'>Il Metodo sCore</h3>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h3 style="color: #E67E22; margin-bottom: 10px;">Il Metodo sCore</h3>
+        <p style="color: #636E72; font-size: 1.1rem; margin: 0;">
+            Il nuovo standard per l'analisi della corsa.<br>
+            Powered by <strong>sCorengine 4.1</strong>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
     col_a, col_b, col_c = st.columns(3, gap="large")
 
