@@ -273,6 +273,9 @@ class ScoreEngine:
                 surface="road" 
             )
 
+            # --- GAMING LAYER ---
+            quality = self.run_quality(final_score)
+
             # --- POST PROCESSING ---
             # Percentuale (p è decimale 0-1) -> 0-100
             wr_pct = p * 100
@@ -293,7 +296,7 @@ class ScoreEngine:
                 "Malus Efficienza": f"-{round(abs(decoupling_decimal * 100), 1)}%" if decoupling_decimal > 0.05 else "OK"
             }
 
-            return final_score, details, wcf, wr_pct
+            return final_score, details, wcf, wr_pct, quality
             
         except Exception as e:
             logger.error(f"Error computing score: {e}")
@@ -316,4 +319,153 @@ class ScoreEngine:
         if age > 30: base += (age - 30) * 0.5
         pct = min(99, (score / 100) * base + 30)
         return int(pct)
+
+    # ============================================================
+    # GAMING LAYER – QUALITÀ DELLA CORSA
+    # ============================================================
+
+    def run_quality(self, score: float) -> Dict[str, str]:
+        """
+        Valuta la qualità della singola corsa (gaming feedback)
+        score: SCORE 4.1 già scalato 0–100
+        """
+        if score >= 95:
+            return {"label": "LEGENDARY 🔥", "color": "purple"}
+        if score >= 90:
+            return {"label": "EPIC 🏆", "color": "blue"}
+        if score >= 80:
+            return {"label": "GREAT 💎", "color": "green"}
+        if score >= 70:
+            return {"label": "SOLID 👍", "color": "teal"}
+        if score >= 60:
+            return {"label": "OK ⚖️", "color": "yellow"}
+        if score >= 40:
+            return {"label": "WEAK 💤", "color": "gray"}
+        return {"label": "WASTED ⚠️", "color": "red"}
+
+    # ============================================================
+    # ACHIEVEMENT SYSTEM
+    # ============================================================
+
+    def achievements(self, scores_last_runs: List[float]) -> List[str]:
+        """
+        Ritorna una lista di achievement sbloccati
+        scores_last_runs: lista score 4.1 (0–100) ordinati dal più vecchio al più recente
+        """
+        ach = []
+        if not scores_last_runs:
+            return ach
+
+        last = scores_last_runs[-1]
+
+        # --- Qualità singola corsa ---
+        if last >= 95:
+            ach.append("🔥 Legendary Run")
+        elif last >= 90:
+            ach.append("🏆 Epic Run")
+        elif last >= 80:
+            ach.append("💎 Great Run")
+
+        # --- Costanza (ultime 5) ---
+        if len(scores_last_runs) >= 5:
+            avg5 = np.mean(scores_last_runs[-5:])
+            if avg5 >= 80:
+                ach.append("📈 Consistency Beast (5 runs)")
+
+        # --- Costanza (ultime 10) ---
+        if len(scores_last_runs) >= 10:
+            avg10 = np.mean(scores_last_runs[-10:])
+            if avg10 >= 75:
+                ach.append("🧱 Iron Engine (10 runs)")
+
+        # --- Miglioramento ---
+        if len(scores_last_runs) >= 3:
+            if scores_last_runs[-1] > scores_last_runs[-2] > scores_last_runs[-3]:
+                ach.append("🚀 On Fire (3 improving runs)")
+
+        # --- Ritorno dopo crisi ---
+        if len(scores_last_runs) >= 4:
+            if scores_last_runs[-4] < 50 and last >= 70:
+                ach.append("💪 Comeback")
+
+        return ach
+
+    # ============================================================
+    # QUALITY TREND
+    # ============================================================
+
+    def quality_trend(self, scores: List[float], window: int = 5) -> Dict[str, float]:
+        """
+        Calcola trend qualità con rolling average
+        """
+        if len(scores) < window:
+            return {"trend": 0.0, "direction": "flat"}
+
+        recent = np.mean(scores[-window:])
+        previous = np.mean(scores[-2*window:-window]) if len(scores) >= 2*window else recent
+
+        delta = recent - previous
+
+        if delta > 3:
+            direction = "up"
+        elif delta < -3:
+            direction = "down"
+        else:
+            direction = "flat"
+
+        return {
+            "recent_avg": round(recent, 1),
+            "previous_avg": round(previous, 1),
+            "delta": round(delta, 1),
+            "direction": direction
+        }
+
+    # ============================================================
+    # LAST 10 RUNS COMPARISON
+    # ============================================================
+
+    def compare_last_10(self, scores: List[float]) -> Dict[str, Any]:
+        """
+        Confronta l'ultima corsa con le precedenti 10
+        """
+        if len(scores) < 2:
+            return {}
+
+        last = scores[-1]
+        last10 = scores[-10:] if len(scores) >= 10 else scores[:-1]
+
+        avg10 = np.mean(last10)
+        best10 = max(last10)
+        worst10 = min(last10)
+
+        return {
+            "vs_avg": round(last - avg10, 1),
+            "vs_best": round(last - best10, 1),
+            "vs_worst": round(last - worst10, 1),
+            "rank": sum(last >= s for s in last10) + 1,
+            "total": len(last10) + 1
+        }
+
+    # ============================================================
+    # FULL GAMING FEEDBACK
+    # ============================================================
+
+    def gaming_feedback(self, scores_history: List[float]) -> Dict[str, Any]:
+        """
+        Restituisce feedback completo per la UI
+        """
+        if not scores_history:
+            return {}
+
+        quality = self.run_quality(scores_history[-1])
+        achievements = self.achievements(scores_history)
+        trend = self.quality_trend(scores_history)
+        compare = self.compare_last_10(scores_history)
+
+        return {
+            "quality": quality,
+            "achievements": achievements,
+            "trend": trend,
+            "comparison": compare
+        }
 

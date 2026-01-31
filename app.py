@@ -264,13 +264,13 @@ else:
                              t, h = WeatherService.get_weather(s['start_latlng'][0], s['start_latlng'][1], dt.strftime("%Y-%m-%d"), dt.hour)
                         m = RunMetrics(s.get('average_watts', 0), s.get('average_heartrate', 0), s.get('distance', 0), s.get('moving_time', 0), s.get('total_elevation_gain', 0), weight, hr_max, hr_rest, t, h, age, sex)
                         dec = eng.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
-                        score, details, wcf, wr_pct = eng.compute_score(m, dec)
+                        score, details, wcf, wr_pct, quality = eng.compute_score(m, dec)
                         rnk, _ = eng.get_rank(score)
                         run_obj = {
                             "id": s['id'], "Data": dt.strftime("%Y-%m-%d"), "Dist (km)": round(m.distance_meters/1000, 2),
                             "Power": int(m.avg_power), "HR": int(m.avg_hr), "Decoupling": round(dec*100, 1), 
                             "SCORE": round(score, 2), "WCF": round(wcf, 2), "WR_Pct": round(wr_pct, 1),
-                            "Rank": rnk, "Meteo": f"{t}°C", "SCORE_DETAIL": details,
+                            "Rank": rnk, "Quality": quality, "Meteo": f"{t}°C", "SCORE_DETAIL": details,
                             "raw_watts": streams['watts']['data'], "raw_hr": streams['heartrate']['data']
                         }
                         if db_svc.save_run(run_obj, athlete_id): count_new += 1
@@ -380,6 +380,55 @@ else:
                         <div style="background:{dec_color}22; color: #555; border: 1px solid {dec_color}; padding:2px 12px; border-radius:15px; font-size:0.65rem; font-weight:700; margin-top:5px;">{drift_cat}</div>
                     </div>
                 </div>""", unsafe_allow_html=True)
+            
+            st.divider()
+
+            # --- GAMING FEEDBACK LAYER ---
+            scores_hist = df['SCORE'].tolist()[::-1] # Ordine cronologico
+            feedback = eng.gaming_feedback(scores_hist)
+            
+            if feedback:
+                st.markdown("### 🎮 Performance Feedback")
+                c_qual, c_trend, c_comp = st.columns([1.2, 1.2, 1.6], gap="medium")
+                
+                with c_qual:
+                    q = feedback['quality']
+                    st.markdown(f"""
+                    <div style="background:{q['color']}22; border:2px solid {q['color']}; padding:15px; border-radius:15px; text-align:center;">
+                        <span style="color:#666; font-size:0.8rem; font-weight:700;">LAST RUN QUALITY</span><br>
+                        <span style="color:{q['color']}; font-size:1.6rem; font-weight:900;">{q['label']}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if feedback['achievements']:
+                        with st.expander("🏅 Achievements", expanded=True):
+                            for a in feedback['achievements']:
+                                st.markdown(f"**{a}**")
+
+                with c_trend:
+                    tr = feedback['trend']
+                    icon = "📈" if tr['direction'] == "up" else "📉" if tr['direction'] == "down" else "⚖️"
+                    st.markdown(f"""
+                    <div style="background:#f8f9fa; border:1px solid #eee; padding:15px; border-radius:15px;">
+                        <span style="color:#666; font-size:0.8rem; font-weight:700;">QUALITY TREND {icon}</span><br>
+                        <span style="font-size:1.4rem; font-weight:800;">{tr['recent_avg']}</span>
+                        <small style="color:{'green' if tr['delta'] > 0 else 'red'};">({'+' if tr['delta'] > 0 else ''}{tr['delta']})</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with c_comp:
+                    cp = feedback['comparison']
+                    if cp:
+                        st.markdown(f"""
+                        <div style="background:#f8f9fa; border:1px solid #eee; padding:15px; border-radius:15px;">
+                            <span style="color:#666; font-size:0.8rem; font-weight:700;">VS LAST 10 RUNS</span><br>
+                            <div style="display:flex; justify-content:space-between; margin-top:5px;">
+                                <span>Media: <b>{'+' if cp['vs_avg'] > 0 else ''}{cp['vs_avg']}</b></span>
+                                <span>Best: <b>{'+' if cp['vs_best'] > 0 else ''}{cp['vs_best']}</b></span>
+                            </div>
+                            <div style="margin-top:8px; font-size:0.9rem;">Rank: <b>#{cp['rank']}</b> di {cp['total']}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
 
             st.divider()
 
