@@ -317,9 +317,9 @@ class ScoreEngine:
             # CORREZIONE 5: Formattazione Ore
             t_ref_int = int(t_ref)
             h = int(t_ref_int // 3600)
-            m = int((t_ref_int % 3600) // 60)
+            mins = int((t_ref_int % 3600) // 60)
             s = int(t_ref_int % 60)
-            t_ref_fmt = f"{h}:{m:02d}:{s:02d}" if h > 0 else f"{m}:{s:02d}"
+            t_ref_fmt = f"{h}:{mins:02d}:{s:02d}" if h > 0 else f"{mins}:{s:02d}"
 
             details = {
                 "Potenza": round(w_kg * 10, 1),           # Proxy visivo
