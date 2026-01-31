@@ -148,6 +148,56 @@ else:
             if "strava_zones" in st.session_state: del st.session_state.strava_zones
             st.rerun()
 
+    # --- 2. CONFIGURAZIONE ATLETA (Caricamento dati) ---
+    ath = st.session_state.strava_token.get("athlete", {})
+    athlete_name = f"{ath.get('firstname', 'Atleta')} {ath.get('lastname', '')}"
+    
+    weight, hr_max, hr_rest, ftp, age, sex = Config.DEFAULT_WEIGHT, Config.DEFAULT_HR_MAX, Config.DEFAULT_HR_REST, Config.DEFAULT_FTP, Config.DEFAULT_AGE, "M"
+    zones_data = None
+    saved_profile = None
+
+    if not st.session_state.demo_mode:
+        token = st.session_state.strava_token["access_token"]
+        athlete_id = ath.get("id")
+        saved_profile = db_svc.get_athlete_profile(athlete_id)
+        
+        if saved_profile:
+            weight = saved_profile.get('weight', weight)
+            hr_max = saved_profile.get('hr_max', hr_max)
+            hr_rest = saved_profile.get('hr_rest', hr_rest)
+            ftp = saved_profile.get('ftp', ftp)
+            age = saved_profile.get('age', age)
+            sex = saved_profile.get('sex', sex)
+        else:
+            s_weight = ath.get('weight', 0)
+            if s_weight: weight = float(s_weight)
+            s_ftp = ath.get('ftp', 0) 
+            if s_ftp: ftp = int(s_ftp)
+            s_sex = ath.get('sex')
+            if s_sex in ['M', 'F']: sex = s_sex 
+            
+            birthdate = ath.get('birthdate')
+            if birthdate:
+                try: age = datetime.now().year - int(str(birthdate).split("-")[0])
+                except: pass
+
+            if "strava_zones" not in st.session_state:
+                st.session_state.strava_zones = auth_svc.fetch_zones(token)
+            zones_data = st.session_state.strava_zones
+            
+            if zones_data:
+                hr_zones = zones_data.get("heart_rate", {}).get("zones", [])
+                if hr_zones:
+                    extracted_max = hr_zones[-1].get("max")
+                    if extracted_max and extracted_max > 0: hr_max = int(extracted_max)
+                    elif age > 0: hr_max = int(208 - (0.7 * age))
+                
+                if ftp == Config.DEFAULT_FTP: 
+                    pwr_zones = zones_data.get("power", {}).get("zones", [])
+                    if len(pwr_zones) > 1:
+                        z2_max = pwr_zones[1].get("max") 
+                        if z2_max and z2_max > 0: ftp = int(z2_max / 0.75)
+
     # --- 3. TOP SECTION: CONTROLLI & PROFILO (2 COLONNE) ---
     st.markdown("<br>", unsafe_allow_html=True)
     col_controls, col_athlete = st.columns([1, 1], gap="large")
