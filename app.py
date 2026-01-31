@@ -64,53 +64,46 @@ if "code" in st.query_params and not st.session_state.strava_token:
 if not st.session_state.strava_token:
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 1. HERO SECTION (Logo 30% più piccolo -> ORA +20%, No Slogan, Icone rimosse)
+    # 1. HERO SECTION (Logo 20% più grande, No Slogan, Strava sotto Logo)
     _, c_center, _ = st.columns([1, 2, 1])
     with c_center:
-        # Logo più grande (+20% rispetto a prima -> Colonne 1:1.5:1)
-        c_img_L, c_img_C, c_img_R = st.columns([1, 1.5, 1])
-        with c_img_C:
+        # Contenitore centratura
+        col_logo_L, col_logo_C, col_logo_R = st.columns([1, 1.5, 1])
+        with col_logo_C:
              try: st.image("sCore.png", use_container_width=True) 
              except: st.markdown("<h1 style='text-align: center; color: #FFCF96;'>sCore Lab</h1>", unsafe_allow_html=True)
+             
+             # Bottone Strava sotto il LOGO (stessa dimensione visiva tramite colonne)
+             redirect_url = "https://scorerun.streamlit.app/" 
+             link_strava = auth_svc.get_link(redirect_url)
+             st.link_button("Connetti Strava", link_strava, type="primary", use_container_width=True)
 
         st.markdown("""
-        <div style="text-align: center; margin-bottom: 20px;">
-            <p style="color: #636E72; font-size: 1.1rem; margin-top: 10px;">
+        <div style="text-align: center; margin-top: 10px; margin-bottom: 20px;">
+            <p style="color: #636E72; font-size: 1.1rem;">
                 Il nuovo standard per l'analisi della corsa.<br>
                 Powered by <strong>Engine 4.1</strong>
             </p>
         </div>
         """, unsafe_allow_html=True)
-        
-        # URL APP
-        redirect_url = "https://scorerun.streamlit.app/" 
-        link_strava = auth_svc.get_link(redirect_url)
-        
-        c1, c2 = st.columns([1, 1], gap="small")
-        with c1: st.link_button("Connetti Strava", link_strava, type="primary", use_container_width=True)
-        with c2: 
-            if st.button("Demo Mode", use_container_width=True):
-                st.session_state.demo_mode = True
-                st.session_state.strava_token = {"access_token": "DEMO", "athlete": {"id": 123, "firstname": "Demo", "lastname": "User"}}
-                st.rerun()
 
-    st.markdown("<br>", unsafe_allow_html=True) # Separatore minimo, non HR
+    st.markdown("<br>", unsafe_allow_html=True) 
 
     # 2. IL MANIFESTO
-    st.markdown("<h3 style='text-align: center; color: #444;'>Il Metodo sCore</h3><br>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #E67E22;'>Il Metodo sCore</h3><br>", unsafe_allow_html=True)
 
     col_a, col_b, col_c = st.columns(3, gap="large")
 
     with col_a:
         st.markdown("""
         <div style="background-color: #F8F9FA; padding: 20px; border-radius: 15px; border-left: 5px solid #FFCF96; height: 100%;">
-            <h4 style="color: #444;">🧠 Capire com’è andata</h4>
+            <h4 style="color: #444;">Capire com’è andata</h4>
             <p style="font-size: 0.9rem; color: #555;">
                 Non tutte le corse sono uguali.<br>
                 SCORE non guarda solo velocità o distanza, ma <strong>come hai gestito lo sforzo</strong> nel tuo contesto attuale.
             </p>
             <p style="font-size: 0.9rem; font-weight: bold;">
-                📊 Un numero solo,<br>molte informazioni utili.
+                Un numero solo,<br>molte informazioni utili.
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -118,7 +111,7 @@ if not st.session_state.strava_token:
     with col_b:
         st.markdown("""
         <div style="background-color: #F8F9FA; padding: 20px; border-radius: 15px; border-left: 5px solid #FF8080; height: 100%;">
-            <h4 style="color: #444;">🎮 Gioca con consapevolezza</h4>
+            <h4 style="color: #444;">Corri con consapevolezza</h4>
             <p style="font-size: 0.9rem; color: #555;">
                 Non è una gara, è un feedback. Nessun giudizio, solo un obiettivo: <strong>correre meglio la prossima volta</strong>.
             </p>
@@ -132,7 +125,7 @@ if not st.session_state.strava_token:
     with col_c:
         st.markdown("""
         <div style="background-color: #F8F9FA; padding: 20px; border-radius: 15px; border-left: 5px solid #CDFAD5; height: 100%;">
-            <h4 style="color: #444;">📈 Migliora nel tempo</h4>
+            <h4 style="color: #444;">Migliora nel tempo</h4>
             <p style="font-size: 0.9rem; color: #555;">
                 Il vero progresso non è spingere sempre, ma capire <strong>quando</strong> farlo.
                 Usa SCORE per riconoscere i giorni buoni e quelli no.
