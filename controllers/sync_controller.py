@@ -53,103 +53,108 @@ class SyncController:
         # Cutoff Date (Filtro post-fetch)
         from datetime import timedelta
         cutoff = datetime.now() - timedelta(days=days_back)
+        
+        # --- SAFE SYNC LOGIC (DROP-IN) ---
+        MAX_STREAMS = 5
+        RETRY = 3
+        stream_count = 0
+
+        import time 
+        import logging
+        logger = logging.getLogger("sCore.Sync")
 
         for i, s in enumerate(activities_list):
             if progress_bar:
                 progress_bar.progress((i + 1) / total)
             
-            # --- FILTRI STRAVA ---
             # Date Filter
             try:
                 dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
-                if dt < cutoff:
-                    continue
-            except:
-                continue # Skip invalid dates
+                if dt < cutoff: continue
+            except: continue
 
             # Robust string ID check
-            if str(s['id']) in existing_ids_str: 
-                continue 
+            if str(s['id']) in existing_ids_str: continue 
             
             # DB Double check
-            if self.db.run_exists(s["id"]):
-                continue
-
-            streams = self.auth.fetch_streams(token, s['id'])
-
-            if not streams:
-                continue
-
-            if len(streams.get("watts", {}).get("data", [])) < 300:
-                continue
-
-            if len(streams.get("heartrate", {}).get("data", [])) < 300:
-                continue
-
-            if streams and 'watts' in streams and 'heartrate' in streams:
-                dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
-                
-                # Meteo
-                t, h = 20.0, 50.0 
-                if s.get('start_latlng'):
-                        t, h = WeatherService.get_weather(s['start_latlng'][0], s['start_latlng'][1], dt.strftime("%Y-%m-%d"), dt.hour)
-                
-                # Metriche
-                # Metriche Base
-                avg_watts = s.get('average_watts', 0)
-                
-                # FALLBACK: Se 0 watt ma esiste lo stream, calcoliamo la media
-                if avg_watts == 0 and streams.get('watts', {}).get('data'):
-                    import numpy as np
-                    avg_watts = np.mean(streams['watts']['data'])
-
-                m = RunMetrics(
-                    avg_watts, 
-                    s.get('average_heartrate', 0), 
-                    s.get('distance', 0), 
-                    s.get('moving_time', 0), 
-                    s.get('total_elevation_gain', 0), 
-                    weight, hr_max, hr_rest, t, h, age, sex
-                )
-                
-                # Engine Calc
-                dec = self.engine.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
-                score, details, wcf, wr_pct, quality = self.engine.compute_score(m, dec)
-                rnk, _ = self.engine.get_rank(score)
-                
-                # Gaming Layer
-                current_history.append(score)
-                gaming = self.engine.gaming_feedback(current_history)
-
-                run_obj = {
-                    "id": s['id'], 
-                    "Data": dt.strftime("%Y-%m-%d"), 
-                    "Dist (km)": round(m.distance_meters/1000, 2),
-                    "Power": int(m.avg_power), 
-                    "HR": int(m.avg_hr), 
-                    "Decoupling": round(dec*100, 1), 
-                    "SCORE": round(score, 2), 
-                    "WCF": round(wcf, 2), 
-                    "WR_Pct": round(wr_pct, 1),
-                    "Rank": rnk, 
-                    "Meteo": f"{t}°C", 
-                    "SCORE_DETAIL": details,
-                    "raw_watts": streams['watts']['data'], 
-                    "raw_hr": streams['heartrate']['data'],
-                    
-                    # Gaming Layer properties
-                    "Quality": gaming["quality"],
-                    "Achievements": gaming["achievements"],
-                    "Trend": gaming["trend"],
-                    "Comparison": gaming["comparison"]
-                }
-                
-                if self.db.save_run(run_obj, athlete_id): 
-                    count_new += 1
+            if self.db.run_exists(s["id"]): continue
             
-            time.sleep(0.1) # Rate limit
+            # --- FETCH STREAMS (LIMIT + RETRY) ---
+            streams = {"watts": {"data": []}, "heartrate": {"data": []}}
+            fetched_streams = False
+            
+            # Fetch stream solo per le prime N attività
+            if stream_count < MAX_STREAMS:
+                for r in range(RETRY):
+                    try:
+                         # Utilizza auth fetch_streams
+                         st_raw = self.auth.fetch_streams(token, s['id'])
+                         if st_raw:
+                             streams = st_raw
+                             stream_count += 1
+                             fetched_streams = True
+                             break
+                    except Exception as e:
+                         time.sleep(2 ** (r + 1)) # Backoff: 2s, 4s...
+            
+            # --- METRICS & CALC ---
+            t, h = 20.0, 50.0 
+            if s.get('start_latlng'):
+                 try:
+                    t, h = WeatherService.get_weather(s['start_latlng'][0], s['start_latlng'][1], dt.strftime("%Y-%m-%d"), dt.hour)
+                 except: pass
+
+            m = RunMetrics(
+                s.get('average_watts', 0),
+                s.get('average_heartrate', 0),
+                s.get('distance', 0),
+                s.get('moving_time', 0),
+                s.get('total_elevation_gain', 0),
+                weight, hr_max, hr_rest,
+                t, h,
+                age, sex
+            )
+
+            dec = self.engine.calculate_decoupling(
+                streams.get('watts', {}).get('data', []),
+                streams.get('heartrate', {}).get('data', [])
+            )
+
+            score, details, wcf, wr_pct, quality = self.engine.compute_score(m, dec)
+            rnk, _ = self.engine.get_rank(score)
+            
+            # Update History for Gaming Logic
+            current_history.append(score)
+            gaming = self.engine.gaming_feedback(current_history)
+
+            run_obj = {
+                "id": s['id'],
+                "Data": dt.strftime("%Y-%m-%d"),
+                "Dist (km)": round(m.distance_meters / 1000, 2),
+                "Power": int(m.avg_power),
+                "HR": int(m.avg_hr),
+                "Decoupling": round(dec * 100, 1),
+                "SCORE": round(score, 2),
+                "WCF": round(wcf, 2),
+                "WR_Pct": round(wr_pct, 1),
+                "Rank": rnk,
+                "Quality": quality,
+                "Meteo": f"{t}°C", 
+                "SCORE_DETAIL": details,
+                "raw_watts": streams.get("watts", {}).get("data", []),
+                "raw_hr": streams.get("heartrate", {}).get("data", []),
+                "Achievements": gaming["achievements"],
+                "Trend": gaming["trend"],
+                "Comparison": gaming["comparison"]
+            }
+
+            if self.db.save_run(run_obj, athlete_id): 
+                count_new += 1
+            
+            # General rate limit sleep
+            time.sleep(0.5)
 
         if count_new > 0:
             self.db.update_streak(athlete_id)
         
-        return count_new, f"Archiviate {count_new} nuove attività!"
+        return count_new, f"Sync terminata: {count_new} nuove attività (Streams utilizzati: {stream_count})"

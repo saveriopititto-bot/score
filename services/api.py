@@ -171,9 +171,16 @@ class StravaService:
                     # Capture Rate Limit Headers (Dev Console)
                     try:
                         import streamlit as st
-                        if "X-ReadRec-Usage" in res.headers:
-                            if "rate_limit_headers" not in st.session_state: st.session_state.rate_limit_headers = {}
-                            st.session_state.rate_limit_headers = dict(res.headers)
+                        usage = res.headers.get("X-RateLimit-Usage", "").split(',')
+                        limit = res.headers.get("X-RateLimit-Limit", "").split(',')
+                        
+                        st.session_state.dev_rate_limits = {
+                            "usage_15min": int(usage[0]) if len(usage) > 0 else 0,
+                            "usage_daily": int(usage[1]) if len(usage) > 1 else 0,
+                            "limit_15min": int(limit[0]) if len(limit) > 0 else 0,
+                            "limit_daily": int(limit[1]) if len(limit) > 1 else 0,
+                            "full_headers": dict(res.headers)
+                        }
                     except: 
                         pass
                         
