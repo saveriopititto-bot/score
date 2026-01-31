@@ -67,37 +67,43 @@ class SyncController:
             if progress_bar:
                 progress_bar.progress((i + 1) / total)
             
+        for i, s in enumerate(activities_list):
+            if progress_bar:
+                progress_bar.progress((i + 1) / total)
+            
+            # --- 1. SIMPLE FILTERS (Come agli inizi) ---
+            # Solo Corsa
+            if s.get('type') != 'Run': 
+                continue
+
             # Date Filter
             try:
                 dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
                 if dt < cutoff: continue
             except: continue
 
-            # Robust string ID check
+            # ID Check
             if str(s['id']) in existing_ids_str: continue 
-            
-            # DB Double check
             if self.db.run_exists(s["id"]): continue
             
-            # --- FETCH STREAMS (LIMIT + RETRY) ---
+            # --- 2. FETCH STREAMS (SAFE LIMIT) ---
             streams = {"watts": {"data": []}, "heartrate": {"data": []}}
-            fetched_streams = False
             
-            # Fetch stream solo per le prime N attività
+            # Scarichiamo streams solo per le prime N attività (Anti-Ban)
             if stream_count < MAX_STREAMS:
                 for r in range(RETRY):
                     try:
-                         # Utilizza auth fetch_streams
+                         # Fetch streams con backoff
                          st_raw = self.auth.fetch_streams(token, s['id'])
                          if st_raw:
                              streams = st_raw
                              stream_count += 1
-                             fetched_streams = True
                              break
-                    except Exception as e:
-                         time.sleep(2 ** (r + 1)) # Backoff: 2s, 4s...
+                    except Exception:
+                         time.sleep(2 ** (r + 1)) 
             
-            # --- METRICS & CALC ---
+            # --- 3. BUILD RUN OBJECT (ROBUST) ---
+            # Meteo (Optional)
             t, h = 20.0, 50.0 
             if s.get('start_latlng'):
                  try:
@@ -115,6 +121,7 @@ class SyncController:
                 age, sex
             )
 
+            # Drift & Score
             dec = self.engine.calculate_decoupling(
                 streams.get('watts', {}).get('data', []),
                 streams.get('heartrate', {}).get('data', [])
@@ -123,7 +130,7 @@ class SyncController:
             score, details, wcf, wr_pct, quality = self.engine.compute_score(m, dec)
             rnk, _ = self.engine.get_rank(score)
             
-            # Update History for Gaming Logic
+            # Update History
             current_history.append(score)
             gaming = self.engine.gaming_feedback(current_history)
 
@@ -141,6 +148,7 @@ class SyncController:
                 "Quality": quality,
                 "Meteo": f"{t}°C", 
                 "SCORE_DETAIL": details,
+                "Device": s.get("device_name", "Unknown"),
                 "raw_watts": streams.get("watts", {}).get("data", []),
                 "raw_hr": streams.get("heartrate", {}).get("data", []),
                 "Achievements": gaming["achievements"],
@@ -151,7 +159,7 @@ class SyncController:
             if self.db.save_run(run_obj, athlete_id): 
                 count_new += 1
             
-            # General rate limit sleep
+            # Simpler rate limit sleep
             time.sleep(0.5)
 
         if count_new > 0:
