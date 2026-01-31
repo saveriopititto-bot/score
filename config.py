@@ -31,7 +31,7 @@ class Config:
 
     # Rank Colors (Hex for SVG/CSS)
     RANK_COLORS = {
-        "ELITE": "#8B5CF6",       # Purple
+        "ELITE": "#CDFAD5",       # Light Green (Palette)
         "PRO": "#3B82F6",         # Blue
         "ADVANCED": "#10B981",    # Emerald
         "INTERMEDIATE": "#F59E0B", # Amber
