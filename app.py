@@ -45,6 +45,12 @@ if "theme" not in st.session_state:
 from ui.style import apply_theme
 apply_theme(st.session_state.theme)
 
+# --- DEV MODE ROUTING ---
+if st.session_state.get("dev_mode"):
+    from ui.dev_console import render_dev_console
+    render_dev_console()
+    st.stop()
+
 st.markdown("""
 <style>
 /* FORCE WHITE CIRCLES UI */

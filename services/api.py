@@ -168,6 +168,15 @@ class StravaService:
                 res = requests.request(method, url, headers=headers, params=params, timeout=10)
                 
                 if res.status_code == 200:
+                    # Capture Rate Limit Headers (Dev Console)
+                    try:
+                        import streamlit as st
+                        if "X-ReadRec-Usage" in res.headers:
+                            if "rate_limit_headers" not in st.session_state: st.session_state.rate_limit_headers = {}
+                            st.session_state.rate_limit_headers = dict(res.headers)
+                    except: 
+                        pass
+                        
                     return res.json()
                 
                 if res.status_code == 429:

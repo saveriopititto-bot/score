@@ -108,5 +108,8 @@ class Config:
     SCORE_GAMMA = 2.0
     SCORE_W_REF = 6.0
     W_REF = 6.0
+    
+    # --- DEV MODE ---
+    DEV_IDS = {12345678, 16167439, 44026330} # Default + typical placeholders, user ID should be added here
 
 

@@ -170,6 +170,17 @@ class ScoreEngine:
 
         # Calcolo Drift % (sempre >= 0)
         drift = (cost2 - cost1) / cost1
+        
+        # Dev Console Capture
+        try:
+            import streamlit as st
+            st.session_state.last_drift_debug = {
+                "p1": round(p1,1), "h1": round(h1,1), "cost1": round(cost1,4),
+                "p2": round(p2,1), "h2": round(h2,1), "cost2": round(cost2,4),
+                "drift_raw": drift
+            }
+        except: pass
+
         return float(max(0.0, drift))
 
     def calculate_zones(self, watts_stream: List[int], ftp: int) -> Dict[str, float]:
@@ -249,6 +260,23 @@ class ScoreEngine:
         score_logistic = 100 * (1 - np.exp(-K * raw_score))
         
         SCORE = np.clip(score_logistic, 0.0, 100.0)
+
+        # Dev Console Capture
+        try:
+             import streamlit as st
+             st.session_state.last_score_math = {
+                 "W_eff": round(W_eff, 3),
+                 "P_eff": round(P_eff, 3),
+                 "HRR_eff": round(HRR_eff, 3),
+                 "stability": round(stability, 3),
+                 "raw_score": round(raw_score, 3),
+                 "logistic_score": round(score_logistic, 3),
+                 "final_score": round(SCORE, 2),
+                 "inputs": {
+                     "W_avg": W_avg, "T_act": T_act_sec, "HR": HR_avg
+                 }
+             }
+        except: pass
 
         return SCORE, p, Tref, WCF
 

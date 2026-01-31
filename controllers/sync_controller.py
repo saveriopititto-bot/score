@@ -24,10 +24,16 @@ class SyncController:
         # --- 1. FETCH SEMPLIFICATO (SOLUZIONE DEFINITIVA) ---
         activities_list = self.auth.fetch_all_activities_simple(token)
         
-        # Debug Temporaneo
-        if progress_bar:
+        # Debug Temporaneo / Dev Console
+        try:
              import streamlit as st
-             st.write(f"Strava activities fetched: {len(activities_list)}")
+             st.session_state.last_activities = activities_list
+             if activities_list:
+                  st.session_state.last_strava_response = activities_list[:2]
+             
+             if progress_bar:
+                 st.write(f"Strava activities fetched: {len(activities_list)}")
+        except: pass
         
         if not activities_list:
              return -1, "Nessuna attività trovata"

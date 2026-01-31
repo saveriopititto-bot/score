@@ -40,3 +40,15 @@ def render_feedback_form(db_service, user_id, user_name):
                         st.success("Grazie! Messaggio ricevuto. 🚀")
                     else:
                         st.error(f"Errore nell'invio: {err}")
+                        
+    # --- DEV CONSOLE SECRET ACCESS ---
+    from config import Config
+    try:
+        user_id_int = int(user_id) if user_id else 0
+        if user_id_int in Config.DEV_IDS:
+             st.markdown("<br>", unsafe_allow_html=True)
+             if st.button("🛠 Developer Console", key="k_dev_btn"):
+                 st.session_state.dev_mode = True
+                 st.rerun()
+    except:
+        pass
