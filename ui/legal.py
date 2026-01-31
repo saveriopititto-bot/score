@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import datetime
-from pages import privacy, terms
+
 
 def render_legal_section():
     year = datetime.now().year
