@@ -332,6 +332,8 @@ class ScoreEngine:
             return final_score, details, wcf, wr_pct, quality
             
         except Exception as e:
+            import streamlit as st
+            st.error(f"⚠️ ENGINE CRASH: {e}")
             logger.error(f"Error computing score: {e}")
             return 0.0, {}, 1.0, 0.0, {}
 
