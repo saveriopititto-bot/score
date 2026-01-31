@@ -323,13 +323,13 @@ else:
 
             # === TAB 1: DASHBOARD ===
             with t1:
-                # Layout centrato per SCORE e TREND IERI
-                _, c_prev, c_main, _ = st.columns([1, 1, 1.5, 1], gap="small")
+                # Layout: Trend | Score Oggi | Score Atteso
+                c_prev, c_today, c_exp = st.columns([1, 1.5, 1.5], gap="medium")
                 
                 with c_prev:
-                    st.markdown(f"""<div style="text-align:center; opacity:0.6"><small>TREND IERI</small><br><h1>{round(prev_ma7, 2)}</h1></div>""", unsafe_allow_html=True)
+                    st.markdown(f"""<div style="text-align:center; opacity:0.6; padding-top: 50px;"><small>TREND (vs Ieri)</small><br><h1>{round(prev_ma7, 2)}</h1></div>""", unsafe_allow_html=True)
                 
-                with c_main:
+                with c_today:
                     clean_rank = cur_run['Rank'].split('/')[0].strip()
                     st.markdown(f"""
                     <div style="display: flex; justify-content: center;">
@@ -340,9 +340,21 @@ else:
                         </div>
                     </div>""", unsafe_allow_html=True)
 
+                with c_exp:
+                    exp_score = round(cur_run['SCORE_MA_28'], 2)
+                    st.markdown(f"""
+                    <div style="display: flex; justify-content: center;">
+                        <div style="width: 170px; height: 170px; border-radius: 50%; border: 6px solid #E0E7FF; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+                            <span style="color: #999; font-size: 0.7rem; font-weight: 700;">ATTESO (28gg)</span>
+                            <span style="color: #6366F1; font-size: 3.2rem; font-weight: 800; line-height: 1;">{exp_score}</span>
+                            <div style="background:#E0E7FF; color:#6366F1; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; margin-top:5px;">BASELINE</div>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
                 st.markdown("<br>", unsafe_allow_html=True)
                 
                 k1, k2, k3, k4, k5, k6 = st.columns(6)
+
                 with k1: st.metric("Efficienza", f"{cur_run['Decoupling']}%", "Drift")
                 with k2: st.metric("Potenza", f"{cur_run['Power']}w", f"{cur_run['Meteo']}")
                 with k3: st.metric("Benchmark", f"{cur_run.get('WR_Pct', 0)}%", "vs World Rec")
