@@ -110,6 +110,6 @@ class Config:
     W_REF = 6.0
     
     # --- DEV MODE ---
-    DEV_IDS = {12345678, 16167439, 44026330} # Default + typical placeholders, user ID should be added here
+    DEV_IDS = {12345678, 59049495} # Saverio's ID added
 
 
