@@ -115,6 +115,15 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error DB Get History: {e}")
             return []
+            
+    def reset_history(self, athlete_id: int) -> bool:
+        """Cancella tutte le corse di un atleta per forzare un ricaricamento pulito."""
+        try:
+            self.client.table("runs").delete().eq("athlete_id", athlete_id).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Error resetting history: {e}")
+            return False
 
     def update_ai_feedback(self, run_id: int, feedback_text: str) -> bool:
         try:

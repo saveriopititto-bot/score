@@ -82,8 +82,16 @@ class SyncController:
                         t, h = WeatherService.get_weather(s['start_latlng'][0], s['start_latlng'][1], dt.strftime("%Y-%m-%d"), dt.hour)
                 
                 # Metriche
+                # Metriche Base
+                avg_watts = s.get('average_watts', 0)
+                
+                # FALLBACK: Se 0 watt ma esiste lo stream, calcoliamo la media
+                if avg_watts == 0 and streams.get('watts', {}).get('data'):
+                    import numpy as np
+                    avg_watts = np.mean(streams['watts']['data'])
+
                 m = RunMetrics(
-                    s.get('average_watts', 0), 
+                    avg_watts, 
                     s.get('average_heartrate', 0), 
                     s.get('distance', 0), 
                     s.get('moving_time', 0), 

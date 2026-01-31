@@ -216,6 +216,17 @@ def render_dashboard(auth_svc, db_svc):
             with c_feed:
                  with st.expander("🐞 Segnala un Bug / Idea", expanded=False):
                     render_feedback_form(db_svc, ath.get("id"), athlete_name)
+                    
+                    st.divider()
+                    st.markdown("##### 🗑️ Zona Pericolo")
+                    if st.button("Reset Totale Database (Cancella e Ricarica)", type="primary"):
+                        if db_svc.reset_history(ath.get("id")):
+                             st.session_state.data = []
+                             st.success("Database resettato. Ricarica la pagina per risincronizzare.")
+                             time.sleep(2)
+                             st.rerun()
+                        else:
+                             st.error("Errore durante il reset.")
             with c_leg:
                  with st.expander("ℹ️ Legenda Metriche", expanded=False):
                      st.markdown("""
