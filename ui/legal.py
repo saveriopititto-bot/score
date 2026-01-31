@@ -56,8 +56,8 @@ def render_legal_section():
     margin-top: 20px;
 ">
     <span>© {year} Progetto indipendente sviluppato in Python</span>
-    <span>All rights reserved · sCore Lab</span>
     <span>Non è uno strumento medico. Interpreta i dati con consapevolezza.</span>
+    <span>All rights reserved · sCore Lab</span>
 </div>
 """, unsafe_allow_html=True)
 
