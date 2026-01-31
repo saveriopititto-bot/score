@@ -490,22 +490,18 @@ else:
                          _, details, _, _ = eng.compute_score(m_tmp, cur_run['Decoupling']/100)
                     
                     d1, d2, d3, d4 = st.columns(4)
-                    with d1: st.metric("🚀 Potenza", f"+{details.get('Potenza', 0)}")
-                    with d2: st.metric("🔋 Volume", f"+{details.get('Volume', 0)}")
-                    with d3: st.metric("💓 Intensità", f"+{details.get('Intensità', 0)}")
-                    with d4: st.metric("📉 Efficienza", f"{details.get('Malus Efficienza', 0)}")
-
-                    # LEGENDA DRIFT SPOSTATA QUI
-                    st.markdown("---")
-                    st.caption("**Legenda Efficienza (Drift):**")
-                    st.markdown("""
-                    <div style="display: flex; gap: 15px; flex-wrap: wrap; font-size: 0.8rem; color: #555;">
-                        <div><span style="color:#10B981;">●</span> &lt;3% Eccellente</div>
-                        <div><span style="color:#F59E0B;">●</span> 3-5% Buono</div>
-                        <div><span style="color:#EF4444;">●</span> &gt;5% Attenzione</div>
-                        <div><span style="color:#991B1B;">●</span> &gt;10% Critico</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    with d1: st.metric("🚀 Potenza", f"+{details.get('Potenza', 0)}%")
+                    with d2: st.metric("🔋 Volume", f"+{details.get('Volume', 0)}%")
+                    with d3: st.metric("💓 Intensità", f"+{details.get('Intensità', 0)}%")
+                    
+                    efficiency_help = """
+                    Legenda Efficienza (Drift):
+                    - <3% Eccellente (Verde)
+                    - 3-5% Buono (Giallo)
+                    - >5% Attenzione (Rosso)
+                    - >10% Critico (Amaranto)
+                    """
+                    with d4: st.metric("📉 Efficienza", f"{details.get('Malus Efficienza', 0)}", help=efficiency_help)
 
                 with st.expander("📂 Archivio Attività", expanded=False):
                     render_history_table(df)
