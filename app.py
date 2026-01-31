@@ -323,7 +323,8 @@ else:
 
             # === TAB 1: DASHBOARD ===
             with t1:
-                c_prev, c_main, c_next = st.columns([1, 1.5, 1], gap="small")
+                # Layout centrato per SCORE e TREND IERI
+                _, c_prev, c_main, _ = st.columns([1, 1, 1.5, 1], gap="small")
                 
                 with c_prev:
                     st.markdown(f"""<div style="text-align:center; opacity:0.6"><small>TREND IERI</small><br><h1>{round(prev_ma7, 2)}</h1></div>""", unsafe_allow_html=True)
@@ -338,18 +339,16 @@ else:
                             <div style="background:#CDFAD5; color:#4A4A4A; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; margin-top:5px;">{clean_rank}</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
-                
-                with c_next:
-                     st.markdown(f"""<div style="text-align:center; opacity:0.8"><small style="color:#6C5DD3">PERCENTILE (ETÀ)</small><br><h1 style="color:#6C5DD3">{age_pct}%</h1></div>""", unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                k1, k2, k3, k4, k5 = st.columns(5)
+                k1, k2, k3, k4, k5, k6 = st.columns(6)
                 with k1: st.metric("Efficienza", f"{cur_run['Decoupling']}%", "Drift")
                 with k2: st.metric("Potenza", f"{cur_run['Power']}w", f"{cur_run['Meteo']}")
                 with k3: st.metric("Benchmark", f"{cur_run.get('WR_Pct', 0)}%", "vs World Rec")
                 with k4: st.metric("WCF Meteo", f"{cur_run.get('WCF', 1.0)}", "Factor")
                 with k5: st.metric("Trend (7gg)", trend_lbl, f"{delta_val:+.3f}", delta_color=trend_col)
+                with k6: st.metric("Percentile", f"{age_pct}%", "By Age")
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
