@@ -28,7 +28,7 @@ def render_legal_section():
             testo = f"{titolo}<br>{descrizione}"
 
             st.markdown(f"""
-            <div style="text-align: center; margin-bottom: 30px;">
+            <div style="text-align: left; margin-bottom: 30px;">
                 <p style="color: #636E72; font-size: 1.1rem; margin: 0;">
                     {testo}<br>
                     Il nuovo standard per l'analisi della corsa.
