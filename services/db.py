@@ -68,6 +68,14 @@ class DatabaseService:
             logger.error(f"Error DB Save Run: {e}")
             return False
 
+    def run_exists(self, run_id: int) -> bool:
+        try:
+            res = self.client.table("runs").select("id").eq("id", run_id).execute()
+            return bool(res.data)
+        except Exception as e:
+            logger.error(f"Error checking if run exists: {e}")
+            return False
+
     def get_history(self) -> List[Dict[str, Any]]:
         """Carica lo storico mappando SQL Supabase -> Dati Python"""
         try:

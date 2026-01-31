@@ -36,13 +36,27 @@ def render_dashboard(auth_svc, db_svc):
         existing_ids = [r['id'] for r in existing_data]
         scores_asc = [r['SCORE'] for r in existing_data][::-1] 
 
+        # Calculate last_import_timestamp from the latest run in DB
+        last_import_timestamp = None
+        if existing_data:
+            try:
+                # We assume "Data" is YYYY-MM-DD
+                dates = [datetime.strptime(r['Data'], "%Y-%m-%d") for r in existing_data if r.get('Data')]
+                if dates:
+                    max_date = max(dates)
+                    last_import_timestamp = int(max_date.timestamp())
+            except Exception as e:
+                # Fallback to None if date parsing fails
+                pass
+
         ctrl = SyncController(auth_svc, db_svc)
         
         with st.spinner(f"Analisi attività Strava con Engine {Config.ENGINE_VERSION}..."):
             bar = st.progress(0)
             count, msg = ctrl.run_sync(
                 token, athlete_id, phys_params, days_back, 
-                existing_ids, scores_asc, progress_bar=bar
+                existing_ids, scores_asc, progress_bar=bar,
+                last_import_timestamp=last_import_timestamp
             )
             
             if count > 0:

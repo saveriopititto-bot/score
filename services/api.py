@@ -151,10 +151,14 @@ class StravaService:
         
         return None
 
-    def fetch_activities(self, token: str, days_back: int=365) -> List[Dict[str, Any]]:
+    def fetch_activities(self, token: str, days_back: int=365, after_timestamp: int=None) -> List[Dict[str, Any]]:
         headers = {"Authorization": f"Bearer {token}"}
-        start_date = datetime.now() - timedelta(days=days_back)
-        epoch_time = int(start_date.timestamp())
+        
+        if after_timestamp:
+            epoch_time = after_timestamp
+        else:
+            start_date = datetime.now() - timedelta(days=days_back)
+            epoch_time = int(start_date.timestamp())
         
         all_activities = []
         page = 1

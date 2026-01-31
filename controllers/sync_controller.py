@@ -10,7 +10,7 @@ class SyncController:
         self.db = db_svc
         self.engine = ScoreEngine()
 
-    def run_sync(self, token, athlete_id, physical_params, days_back, existing_ids, history_scores, progress_bar=None):
+    def run_sync(self, token, athlete_id, physical_params, days_back, existing_ids, history_scores, progress_bar=None, last_import_timestamp=None):
         """
         Esegue la sync. Ritona (count_new, message).
         history_scores: lista di float degli score precedenti (per calcolo gaming)
@@ -21,10 +21,9 @@ class SyncController:
         age = physical_params.get('age', Config.DEFAULT_AGE)
         sex = physical_params.get('sex', 'M')
 
-        activities_list = self.auth.fetch_activities(token, days_back=days_back)
+        activities_list = self.auth.fetch_activities(token, days_back=days_back, after_timestamp=last_import_timestamp)
         if not activities_list:
-            if activities_list is None: # Error case, fetch_activities returns None on error? Or empty list? assumed empty list usually.
-                # Just robust check
+            if activities_list is None: # Error case
                 pass
             return -1, "Nessuna attività trovata"
 
@@ -41,10 +40,39 @@ class SyncController:
             if progress_bar:
                 progress_bar.progress((i + 1) / total)
             
+            # --- FILTRI STRAVA ROBUSTI ---
+            if s.get("type") != "Run":
+                continue
+
+            if s.get("sport_type") not in ["Run", "TrailRun"]:
+                continue
+
+            if s.get("moving_time", 0) < 600:
+                continue
+
+            if s.get("distance", 0) < 1500:
+                continue
+
+            if not s.get("start_latlng"):
+                continue
+
             if s['id'] in existing_ids: 
                 continue 
 
+            if self.db.run_exists(s["id"]):
+                continue
+
             streams = self.auth.fetch_streams(token, s['id'])
+
+            if not streams:
+                continue
+
+            if len(streams.get("watts", {}).get("data", [])) < 300:
+                continue
+
+            if len(streams.get("heartrate", {}).get("data", [])) < 300:
+                continue
+
             if streams and 'watts' in streams and 'heartrate' in streams:
                 dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
                 
