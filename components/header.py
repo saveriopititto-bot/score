@@ -13,3 +13,17 @@ def render_header():
             st.session_state.demo_mode = False
             if "strava_zones" in st.session_state: del st.session_state.strava_zones
             st.rerun()
+
+        st.markdown("---")
+        # Theme Toggle
+        curr = st.session_state.get("theme", "light").capitalize()
+        opts = ["Light", "Dark"]
+        try: idx = opts.index(curr)
+        except: idx = 0
+        
+        # Use a smaller label or hidden label for aesthetics if needed, but user just said "choice".
+        sel = st.radio("Tema", opts, index=idx, horizontal=True, label_visibility="collapsed", key="header_theme_toggle")
+        
+        if sel.lower() != st.session_state.theme:
+            st.session_state.theme = sel.lower()
+            st.rerun()
