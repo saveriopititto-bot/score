@@ -377,13 +377,10 @@ else:
                     st.markdown(f"""
                     <div class="score-circle-container" style="display: flex; justify-content: center; cursor: pointer;">
                         <div style="position: relative; width: 230px; height: 230px;">
-                            <!-- SVG Ring for Animation -->
                             <svg class="score-circle-svg" width="230" height="230" style="position: absolute; top:0; left:0; transform: rotate(-90deg);">
                                 <circle cx="115" cy="115" r="110" stroke="#eee" stroke-width="6" fill="white" />
                                 <circle class="progress" cx="115" cy="115" r="110" style="stroke: {rank_color} !important;" />
                             </svg>
-                            
-                            <!-- Content -->
                             <div style="position: absolute; top:0; left:0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;">
                                 <span style="color: #999; font-size: 0.9rem; font-weight: 700; letter-spacing: 1px;">OGGI</span>
                                 <span style="color: #2D3436; font-size: 5rem; font-weight: 800; line-height: 0.9;">{cur_score}</span>
