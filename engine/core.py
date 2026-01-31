@@ -436,7 +436,7 @@ class ScoreEngine:
         Calcola trend qualità con rolling average
         """
         if len(scores) < window:
-            return {"trend": 0.0, "direction": "flat"}
+            return {"trend": 0.0, "direction": "flat", "delta": 0.0}
 
         recent = np.mean(scores[-window:])
         previous = np.mean(scores[-2*window:-window]) if len(scores) >= 2*window else recent

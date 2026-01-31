@@ -141,12 +141,19 @@ def render_dashboard(auth_svc, db_svc):
                                 st.markdown(f"**{a}**")
 
                 with c_trend:
-                    tr = feedback['trend']
-                    render_trend_card(tr['delta'])
+                    tr = feedback.get('trend', {})
+                    # Robust access using .get with default 0.0
+                    delta = tr.get('delta', 0.0)
+                    render_trend_card(delta)
                     
                     # Microcopy Coach Feedback
-                    msg = get_coach_feedback("up" if tr['delta'] > 3 else "down" if tr['delta'] < -3 else "flat")
+                    msg = get_coach_feedback("up" if delta > 3 else "down" if delta < -3 else "flat")
                     st.caption(f"🧠 {msg}")
+                    
+                    # --- DBG LOG BUTTON REQUESTED BY USER ---
+                    with st.popover("⚙️ Logs"):
+                        st.json(tr)
+                        st.write("Full Feedback:", feedback)
                 
                 with c_comp:
                     cp = feedback['comparison']
