@@ -21,11 +21,16 @@ class SyncController:
         age = physical_params.get('age', Config.DEFAULT_AGE)
         sex = physical_params.get('sex', 'M')
 
-        activities_list = self.auth.fetch_activities(token, days_back=days_back, after_timestamp=last_import_timestamp)
+        # --- 1. FETCH SEMPLIFICATO (SOLUZIONE DEFINITIVA) ---
+        activities_list = self.auth.fetch_all_activities_simple(token)
+        
+        # Debug Temporaneo
+        if progress_bar:
+             import streamlit as st
+             st.write(f"Strava activities fetched: {len(activities_list)}")
+        
         if not activities_list:
-            if activities_list is None: 
-                pass
-            return -1, "Nessuna attività trovata"
+             return -1, "Nessuna attività trovata"
 
         # FIX ORDER: Strava returns Newest-First. We need Oldest-First for Gaming History.
         activities_list.sort(key=lambda x: x['start_date_local'])
@@ -38,22 +43,29 @@ class SyncController:
 
         # FIX TYPE MISMATCH: Ensure all are strings
         existing_ids_str = set(str(eid) for eid in existing_ids)
+        
+        # Cutoff Date (Filtro post-fetch)
+        from datetime import timedelta
+        cutoff = datetime.now() - timedelta(days=days_back)
 
         for i, s in enumerate(activities_list):
             if progress_bar:
                 progress_bar.progress((i + 1) / total)
             
             # --- FILTRI STRAVA ---
-            # ... (omitted filters) ...
+            # Date Filter
+            try:
+                dt = datetime.strptime(s['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
+                if dt < cutoff:
+                    continue
+            except:
+                continue # Skip invalid dates
 
-            # Filter already synced runs using STRING COMPARISON
+            # Robust string ID check
             if str(s['id']) in existing_ids_str: 
                 continue 
             
             # DB Double check
-            if self.db.run_exists(s["id"]):
-                continue
-
             if self.db.run_exists(s["id"]):
                 continue
 

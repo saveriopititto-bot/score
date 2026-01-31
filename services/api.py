@@ -111,6 +111,41 @@ class StravaService:
         scope = "activity:read_all,profile:read_all"
         return f"https://www.strava.com/oauth/authorize?client_id={self.client_id}&response_type=code&redirect_uri={redirect_uri}&approval_prompt=force&scope={scope}"
 
+    def fetch_all_activities_simple(self, token, per_page=50, max_pages=20):
+        """
+        Fetch robusto: prende TUTTE le attività disponibili tramite paginazione.
+        Non usa days_back (Strava non è affidabile su filtri temporali).
+        """
+        headers = {"Authorization": f"Bearer {token}"}
+        all_activities = []
+
+        for page in range(1, max_pages + 1):
+            res = requests.get(
+                f"{self.base_url}/athlete/activities",
+                headers=headers,
+                params={
+                    "per_page": per_page,
+                    "page": page
+                },
+                timeout=20
+            )
+            # Safe parsing
+            if res.status_code != 200:
+                logger.error(f"Strava API Error (Simple Fetch): {res.text}")
+                break
+                
+            acts = res.json()
+
+            if not acts:
+                break
+
+            all_activities.extend(acts)
+            
+            # Simple rate limit prevention
+            time.sleep(0.5)
+
+        return all_activities
+
     def get_token(self, code: str) -> Optional[Dict[str, Any]]:
         try:
             res = requests.post("https://www.strava.com/oauth/token", data={
