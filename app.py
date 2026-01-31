@@ -422,6 +422,7 @@ else:
                     if dec_val > 5.0: dec_color = "#EF4444" # Red
                     elif dec_val > 3.0: dec_color = "#F59E0B" # Amber
 
+                    # CSS STATICO (con variabili) + HTML DINAMICO
                     st.markdown(f"""
 <style>
     /* Container */
@@ -440,7 +441,8 @@ else:
         width: 140px;
         height: 140px;
         border-radius: 50%;
-        border: 4px solid {dec_color};
+        /* USO VARIABILE CSS */
+        border: 4px solid var(--drift-color);
         background: white;
         display: flex;
         flex-direction: column;
@@ -496,7 +498,8 @@ else:
     }}
 </style>
 
-<div class="drift-container">
+<!-- Passiamo il colore via style inline al container -->
+<div class="drift-container" style="--drift-color: {dec_color};">
     <!-- TOOLTIP CUSTOM -->
     <div class="drift-tooltip">
         <div class="drift-tooltip-item" style="color: #10B981;">&lt;3% Eccellente</div>
