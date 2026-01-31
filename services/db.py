@@ -76,6 +76,15 @@ class DatabaseService:
             logger.error(f"Error checking if run exists: {e}")
             return False
 
+    def get_run_ids_for_athlete(self, athlete_id: int) -> List[int]:
+        """Recupera tutti gli ID delle corse per un atleta specifico"""
+        try:
+            res = self.client.table("runs").select("id").eq("athlete_id", athlete_id).execute()
+            return [row['id'] for row in res.data] if res.data else []
+        except Exception as e:
+            logger.error(f"Error getting run IDs for athlete: {e}")
+            return []
+
     def get_history(self) -> List[Dict[str, Any]]:
         """Carica lo storico mappando SQL Supabase -> Dati Python"""
         try:

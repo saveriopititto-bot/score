@@ -4,7 +4,6 @@ import time
 from datetime import datetime, timedelta
 from config import Config
 from engine.core import ScoreEngine, RunMetrics
-from controllers.sync_controller import SyncController
 from ui.legal import render_legal_section
 from ui.visuals import render_history_table, render_trend_chart, render_scatter_chart, render_zones_chart, render_quality_badge, render_trend_card, get_coach_feedback, quality_circle, trend_circle, comparison_circle
 from ui.feedback import render_feedback_form
@@ -31,43 +30,31 @@ def render_dashboard(auth_svc, db_svc):
         token = st.session_state.strava_token["access_token"]
         athlete_id = ath.get("id")
         
-        # Prepare context (history for gaming feedback)
-        existing_data = st.session_state.data or []
-        existing_ids = [r['id'] for r in existing_data]
-        scores_asc = [r['SCORE'] for r in existing_data][::-1] 
-
-        # Calculate last_import_timestamp from the latest run in DB
-        last_import_timestamp = None
-        if existing_data:
-            try:
-                # We assume "Data" is YYYY-MM-DD
-                dates = [datetime.strptime(r['Data'], "%Y-%m-%d") for r in existing_data if r.get('Data')]
-                if dates:
-                    max_date = max(dates)
-                    last_import_timestamp = int(max_date.timestamp())
-            except Exception as e:
-                # Fallback to None if date parsing fails
-                pass
-
-        ctrl = SyncController(auth_svc, db_svc)
+        # Import the robust sync function
+        from services.strava_sync import safe_strava_sync
         
-        with st.spinner(f"Analisi attività Strava con Engine {Config.ENGINE_VERSION}..."):
-            bar = st.progress(0)
-            count, msg = ctrl.run_sync(
-                token, athlete_id, phys_params, days_to_fetch, 
-                existing_ids, scores_asc, progress_bar=bar,
-                last_import_timestamp=last_import_timestamp
+        with st.spinner(f"Sync Strava sicuro (Engine {Config.ENGINE_VERSION})..."):
+            res = safe_strava_sync(
+                auth_svc,
+                db_svc,
+                ScoreEngine(),
+                token,
+                athlete_id,
+                phys_params.get('weight', Config.DEFAULT_WEIGHT),
+                phys_params.get('hr_max', Config.DEFAULT_HR_MAX),
+                phys_params.get('hr_rest', Config.DEFAULT_HR_REST),
+                phys_params.get('age', Config.DEFAULT_AGE),
+                phys_params.get('sex', 'M'),
+                days_to_fetch
             )
             
-            if count > 0:
-                st.success(msg)
+            if res['new'] > 0:
+                st.success(f"✅ Sync completato: {res['new']} nuove corse, {res['updated']} aggiornate, {res['skipped']} già presenti")
                 time.sleep(1)
-                st.session_state.data = db_svc.get_history() # Refresh data
+                st.session_state.data = db_svc.get_history()  # Refresh data
                 st.rerun()
-            elif count == 0:
-                 st.info("Database già aggiornato.")
             else:
-                 st.warning(msg)
+                st.info(f"Database già aggiornato. {res['skipped']} corse già presenti.")
 
     # --- VISUALIZZAZIONE DASHBOARD ---
     if st.session_state.data:
