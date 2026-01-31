@@ -323,38 +323,77 @@ else:
 
             # === TAB 1: DASHBOARD ===
             with t1:
-                # Layout: Atteso (Text) | Score Oggi (Circle) | Trend/Ieri (Circle)
-                c_exp, c_today, c_trend = st.columns([1, 1.5, 1.5], gap="medium")
+                # INJECT CUSTOM CSS FOR ANIMATIONS
+                st.markdown("""
+                <style>
+                    /* Base Circle Style */
+                    .stat-circle {
+                        transition: all 0.3s ease;
+                    }
+                    .stat-circle:hover {
+                        transform: scale(1.05);
+                        box-shadow: 0 15px 35px rgba(0,0,0,0.15) !important;
+                    }
+                    
+                    /* SVG Animation for Central Circle */
+                    .score-circle-svg circle.progress {
+                        fill: none;
+                        stroke: #CDFAD5;
+                        stroke-width: 6;
+                        stroke-dasharray: 0, 1000;
+                        transition: stroke-dasharray 1s ease-out;
+                    }
+                    .score-circle-container:hover circle.progress {
+                        stroke-dasharray: 800, 1000; /* Approximate circumference */
+                        stroke: #6C5DD3; /* Color change on hover */
+                    }
+                </style>
+                """, unsafe_allow_html=True)
+
+                # Layout: Atteso (Text) | Score Oggi (Big Circle) | Trend/Ieri (Circle)
+                # Aumentiamo lo spazio centrale per il cerchio più grande
+                c_exp, c_today, c_trend = st.columns([1, 2, 1], gap="small", vertical_alignment="center")
                 
                 with c_exp:
                     exp_score = round(cur_run['SCORE_MA_28'], 2)
                     st.markdown(f"""
-                    <div style="display: flex; justify-content: center;">
-                        <div style="width: 170px; height: 170px; border-radius: 50%; border: 6px solid #E0E7FF; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
-                            <span style="color: #999; font-size: 0.7rem; font-weight: 700;">ATTESO (28gg)</span>
-                            <span style="color: #6366F1; font-size: 3.2rem; font-weight: 800; line-height: 1;">{exp_score}</span>
-                            <div style="background:#E0E7FF; color:#6366F1; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; margin-top:5px;">BASELINE</div>
+                    <div class="stat-circle" style="display: flex; justify-content: center;">
+                        <div style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #E0E7FF; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
+                            <span style="color: #999; font-size: 0.65rem; font-weight: 700;">ATTESO</span>
+                            <span style="color: #6366F1; font-size: 2.2rem; font-weight: 800; line-height: 1;">{exp_score}</span>
+                            <div style="background:#E0E7FF; color:#6366F1; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">BASELINE</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
                 
                 with c_today:
+                    # Central Circle: +50% bigger (apx 220px vs 140px)
+                    # Using SVG to allow "border filling" animation
                     clean_rank = cur_run['Rank'].split('/')[0].strip()
                     st.markdown(f"""
-                    <div style="display: flex; justify-content: center;">
-                        <div style="width: 170px; height: 170px; border-radius: 50%; border: 6px solid #CDFAD5; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
-                            <span style="color: #999; font-size: 0.7rem; font-weight: 700;">SCORE OGGI</span>
-                            <span style="color: #4A4A4A; font-size: 3.2rem; font-weight: 800; line-height: 1;">{cur_score}</span>
-                            <div style="background:#CDFAD5; color:#4A4A4A; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; margin-top:5px;">{clean_rank}</div>
+                    <div class="score-circle-container" style="display: flex; justify-content: center; cursor: pointer;">
+                        <div style="position: relative; width: 230px; height: 230px;">
+                            <!-- SVG Ring for Animation -->
+                            <svg class="score-circle-svg" width="230" height="230" style="position: absolute; top:0; left:0; transform: rotate(-90deg);">
+                                <circle cx="115" cy="115" r="110" stroke="#eee" stroke-width="6" fill="white" />
+                                <circle class="progress" cx="115" cy="115" r="110" />
+                            </svg>
+                            
+                            <!-- Content -->
+                            <div style="position: absolute; top:0; left:0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;">
+                                <span style="color: #999; font-size: 0.9rem; font-weight: 700; letter-spacing: 1px;">OGGI</span>
+                                <span style="color: #2D3436; font-size: 5rem; font-weight: 800; line-height: 0.9;">{cur_score}</span>
+                                <div style="background:#CDFAD5; color:#2D3436; padding:4px 16px; border-radius:20px; font-size:0.8rem; font-weight: 700; margin-top: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">{clean_rank}</div>
+                            </div>
                         </div>
                     </div>""", unsafe_allow_html=True)
 
                 with c_trend:
                     st.markdown(f"""
-                    <div style="display: flex; justify-content: center;">
-                        <div style="width: 170px; height: 170px; border-radius: 50%; border: 6px solid #F3F4F6; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
-                            <span style="color: #999; font-size: 0.7rem; font-weight: 700;">TREND (vs Ieri)</span>
-                            <span style="color: #4B5563; font-size: 3.2rem; font-weight: 800; line-height: 1;">{round(prev_ma7, 2)}</span>
-                            <div style="background:#F3F4F6; color:#4B5563; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; margin-top:5px;">LAST 7D</div>
+                    <div class="stat-circle" style="display: flex; justify-content: center;">
+                        <div style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #F3F4F6; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
+                            <span style="color: #999; font-size: 0.65rem; font-weight: 700;">TREND</span>
+                            <span style="color: #4B5563; font-size: 2.2rem; font-weight: 800; line-height: 1;">{round(prev_ma7, 2)}</span>
+                            <div style="background:#F3F4F6; color:#4B5563; padding:2px 10px; border-radius:15px; font-size:0.6rem; font-weight:700; margin-top:3px;">LAST 7D</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
 
