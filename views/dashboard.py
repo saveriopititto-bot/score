@@ -205,7 +205,7 @@ def render_dashboard(auth_svc, db_svc):
                     if not details or not isinstance(details, dict):
                          # Note: using 0 for optional params to metrics, just fallback
                          m_tmp = RunMetrics(cur_run['Power'], cur_run['HR'], cur_run['Dist (km)']*1000, 0, 0, phys_params['weight'], phys_params['hr_max'], phys_params['hr_rest'], 20, 50)
-                         _, details, _, _ = eng.compute_score(m_tmp, cur_run['Decoupling']/100)
+                         _, details, _, _, _ = eng.compute_score(m_tmp, cur_run['Decoupling']/100)
                     d1, d2 = st.columns(2)
                     with d1: st.metric("🚀 Potenza", f"+{details.get('Potenza', 0)}%")
                     with d2: st.metric("🔋 Volume", f"+{details.get('Volume', 0)}%")

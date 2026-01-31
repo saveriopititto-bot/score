@@ -93,7 +93,7 @@ class SyncController:
                 
                 # Engine Calc
                 dec = self.engine.calculate_decoupling(streams['watts']['data'], streams['heartrate']['data'])
-                score, details, wcf, wr_pct, quality_obj = self.engine.compute_score(m, dec)
+                score, details, wcf, wr_pct, quality = self.engine.compute_score(m, dec)
                 rnk, _ = self.engine.get_rank(score)
                 
                 # Gaming Layer

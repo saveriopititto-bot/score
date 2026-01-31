@@ -263,7 +263,7 @@ class ScoreEngine:
 
         return SCORE, p, Tref, WCF
 
-    def compute_score(self, m: RunMetrics, decoupling_decimal: float) -> Tuple[float, Dict[str, Any], float, float]:
+    def compute_score(self, m: RunMetrics, decoupling_decimal: float) -> Tuple[float, Dict[str, Any], float, float, Dict[str, Any]]:
         """
         Wrapper che collega l'app alla matematica 4.1
         """
@@ -333,7 +333,7 @@ class ScoreEngine:
             
         except Exception as e:
             logger.error(f"Error computing score: {e}")
-            return 0.0, {}, 1.0, 0.0
+            return 0.0, {}, 1.0, 0.0, {}
 
     def get_rank(self, score: float) -> Tuple[str, str]:
         # Use config thresholds if available
