@@ -323,11 +323,12 @@ else:
 
             # === TAB 1: DASHBOARD ===
             with t1:
-                # Layout: Trend | Score Oggi | Score Atteso
-                c_prev, c_today, c_exp = st.columns([1, 1.5, 1.5], gap="medium")
+                # Layout: Atteso (Text) | Score Oggi (Circle) | Trend/Ieri (Circle)
+                c_exp, c_today, c_trend = st.columns([1, 1.5, 1.5], gap="medium")
                 
-                with c_prev:
-                    st.markdown(f"""<div style="text-align:center; opacity:0.6; padding-top: 50px;"><small>TREND (vs Ieri)</small><br><h1>{round(prev_ma7, 2)}</h1></div>""", unsafe_allow_html=True)
+                with c_exp:
+                    exp_score = round(cur_run['SCORE_MA_28'], 2)
+                    st.markdown(f"""<div style="text-align:center; opacity:0.6; padding-top: 50px;"><small>ATTESO (28gg)</small><br><h1>{exp_score}</h1></div>""", unsafe_allow_html=True)
                 
                 with c_today:
                     clean_rank = cur_run['Rank'].split('/')[0].strip()
@@ -340,14 +341,13 @@ else:
                         </div>
                     </div>""", unsafe_allow_html=True)
 
-                with c_exp:
-                    exp_score = round(cur_run['SCORE_MA_28'], 2)
+                with c_trend:
                     st.markdown(f"""
                     <div style="display: flex; justify-content: center;">
-                        <div style="width: 170px; height: 170px; border-radius: 50%; border: 6px solid #E0E7FF; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
-                            <span style="color: #999; font-size: 0.7rem; font-weight: 700;">ATTESO (28gg)</span>
-                            <span style="color: #6366F1; font-size: 3.2rem; font-weight: 800; line-height: 1;">{exp_score}</span>
-                            <div style="background:#E0E7FF; color:#6366F1; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; margin-top:5px;">BASELINE</div>
+                        <div style="width: 170px; height: 170px; border-radius: 50%; border: 6px solid #F3F4F6; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+                            <span style="color: #999; font-size: 0.7rem; font-weight: 700;">TREND (vs Ieri)</span>
+                            <span style="color: #4B5563; font-size: 3.2rem; font-weight: 800; line-height: 1;">{round(prev_ma7, 2)}</span>
+                            <div style="background:#F3F4F6; color:#4B5563; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; margin-top:5px;">LAST 7D</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
 
