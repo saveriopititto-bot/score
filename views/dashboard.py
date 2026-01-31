@@ -152,15 +152,15 @@ def render_dashboard(auth_svc, db_svc):
                     cp = feedback['comparison']
                     if cp:
                         st.markdown(f"""
-                        <div class="glass-card">
-                            <span style="color:#666; font-size:0.8rem; font-weight:700;">VS LAST 10 RUNS</span><br>
-                            <div style="display:flex; justify-content:space-between; margin-top:5px;">
-                                <span>Media: <b>{'+' if cp['vs_avg'] > 0 else ''}{cp['vs_avg']}</b></span>
-                                <span>Best: <b>{'+' if cp['vs_best'] > 0 else ''}{cp['vs_best']}</b></span>
-                            </div>
-                            <div style="margin-top:8px; font-size:0.9rem;">Rank: <b>#{cp['rank']}</b> di {cp['total']}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+<div class="glass-card">
+<span style="color:#666; font-size:0.8rem; font-weight:700;">VS LAST 10 RUNS</span><br>
+<div style="display:flex; justify-content:space-between; margin-top:5px;">
+<span>Media: <b>{'+' if cp['vs_avg'] > 0 else ''}{cp['vs_avg']}</b></span>
+<span>Best: <b>{'+' if cp['vs_best'] > 0 else ''}{cp['vs_best']}</b></span>
+</div>
+<div style="margin-top:8px; font-size:0.9rem;">Rank: <b>#{cp['rank']}</b> di {cp['total']}</div>
+</div>
+""", unsafe_allow_html=True)
 
             st.divider()
 

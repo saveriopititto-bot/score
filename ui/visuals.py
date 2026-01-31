@@ -20,23 +20,23 @@ def render_quality_badge(label, color_key="neutral"):
     else: c = SCORE_COLORS['neutral']
 
     st.markdown(f"""
-    <div style="text-align:center; padding: 20px;">
-        <div style="font-size:0.8rem; letter-spacing:1px; margin-bottom:10px; opacity:0.7;">QUALITY</div>
-        <div style="
-            display: inline-block;
-            padding: 10px 24px;
-            background: {c}20;
-            border: 1px solid {c};
-            color: {c};
-            border-radius: 12px;
-            font-weight: 800;
-            font-size: 1.2rem;
-            animation: pulse 2s infinite;
-        ">
-            {label}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+<div style="text-align:center; padding: 20px;">
+<div style="font-size:0.8rem; letter-spacing:1px; margin-bottom:10px; opacity:0.7;">QUALITY</div>
+<div style="
+display: inline-block;
+padding: 10px 24px;
+background: {c}20;
+border: 1px solid {c};
+color: {c};
+border-radius: 12px;
+font-weight: 800;
+font-size: 1.2rem;
+animation: pulse 2s infinite;
+">
+{label}
+</div>
+</div>
+""", unsafe_allow_html=True)
 
 def render_trend_card(delta):
     """
@@ -53,14 +53,14 @@ def render_trend_card(delta):
         icon = "⚖️"
         
     st.markdown(f"""
-    <div class="glass-card" style="text-align:center; height: 100%;">
-        <div style="font-size:0.8rem; font-weight:700; opacity:0.6;">RECENT TREND</div>
-        <div style="font-size:2rem; font-weight:800; margin: 10px 0; color:{col};">
-            {icon} {delta}
-        </div>
-        <div style="font-size:0.8rem; opacity:0.8;">vs Previous Average</div>
-    </div>
-    """, unsafe_allow_html=True)
+<div class="glass-card" style="text-align:center; height: 100%;">
+<div style="font-size:0.8rem; font-weight:700; opacity:0.6;">RECENT TREND</div>
+<div style="font-size:2rem; font-weight:800; margin: 10px 0; color:{col};">
+{icon} {delta}
+</div>
+<div style="font-size:0.8rem; opacity:0.8;">vs Previous Average</div>
+</div>
+""", unsafe_allow_html=True)
 
 # --- CHARTS ---
 
