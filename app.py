@@ -47,37 +47,24 @@ apply_theme(st.session_state.theme)
 
 st.markdown("""
 <style>
-:root {
-  --bg-light: #ffffff;
-  --bg-dark: #0f0f0f;
-  --text-light: #2D3436;
-  --text-dark: #eaeaea;
-}
-
-/* Dark mode auto */
-@media (prefers-color-scheme: dark) {
-  .stat-circle {
-    background: var(--bg-dark) !important;
-    color: var(--text-dark);
-    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
-  }
-}
-
-/* Light mode */
+/* FORCE WHITE CIRCLES UI */
 .stat-circle {
-  background: var(--bg-light);
-  color: var(--text-light);
+  background: #ffffff !important;  /* Sempre Bianco */
+  color: #2D3436 !important;       /* Sempre Testo Scuro */
   border-radius: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15); /* Ombra per stacco */
   animation: scaleIn 0.45s ease-out;
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
+/* Hover Effect */
 .stat-circle:hover {
   transform: scale(1.06);
+  box-shadow: 0 15px 40px rgba(0,0,0,0.25);
 }
 
 @keyframes scaleIn {
