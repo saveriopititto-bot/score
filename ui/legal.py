@@ -36,16 +36,16 @@ def render_legal_section():
             </div>
             """, unsafe_allow_html=True)
                 
-        #with col2:
+        with col2:
+            st.markdown("**Legale**")
+            st.markdown("[Privacy Policy](https://scorerun.streamlit.app/privacy)")
+            st.markdown("[Terms of Service](https://scorerun.streamlit.app/terms)")
+
+        #with col3:
         #    st.markdown("**Risorse**")
         #    st.markdown("[Home](/)")
         #    st.markdown("[GitHub 🐙](https://github.com)")
         #    st.markdown("[Strava 🏃](https://strava.com)")
-
-        with col3:
-            st.markdown("**Legale**")
-            st.markdown("[Privacy Policy](https://scorerun.streamlit.app/privacy)")
-            st.markdown("[Terms of Service](https://scorerun.streamlit.app/terms)")
 
         st.markdown("---")
         st.markdown(f"""
