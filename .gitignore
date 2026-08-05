@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Python test artifacts (existing committed __pycache__/*.pyc files are left as-is)
+.pytest_cache
+corsaapp/tests/__pycache__
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
